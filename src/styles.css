@@ -802,15 +802,24 @@ main {
   margin-top: 15px !important;
   color: #b49f86 !important;
 }
+
+
 .conversation {
   height: calc(100% - 90px);
   display: flex;
   flex-direction: column;
-  max-width: 990px;
-  margin: auto;
-  padding: 0 42px 20px;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+  padding: 0 0 20px;
 }
+
+
 .conversation-title {
+  width: calc(100% - 84px);
+  max-width: 906px;
+  margin-inline: auto;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -818,6 +827,7 @@ main {
   border-bottom: 1px solid #282d33;
   padding: 12px 0 22px;
 }
+
 .conversation-title h2 {
   font-size: 18px;
   font-weight: 450;
@@ -826,11 +836,18 @@ main {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .messages {
   flex: 1;
-  overflow: auto;
-  padding: 26px 5px;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 26px max(47px, calc((100% - 916px) / 2));
 }
+
+
 .message {
   display: flex;
   gap: 15px;
@@ -1348,4 +1365,13 @@ button:disabled {
     right: 0;
     width: 240px;
   }
+}
+
+
+.chat-composer {
+  width: 100%;
+  max-width: 990px;
+  flex-shrink: 0;
+  margin-inline: auto;
+  padding-inline: 42px;
 }
