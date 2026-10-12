@@ -1,5 +1,5 @@
 const ENDPOINT = "http://127.0.0.1:5000/process";
-const INFERENCE_TIMEOUT_MS = 260_000;
+const INFERENCE_TIMEOUT_MS = 600_000;
 const MAX_PROMPT_LENGTH = 12_000;
 const MAX_RESPONSE_BYTES = 2_100_000;
 const actions = new Set([
