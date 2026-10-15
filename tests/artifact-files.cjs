@@ -68,9 +68,27 @@ const { writeArtifact } = require("../electron/artifact-files.cjs");
       content: "new source",
     });
     assert.equal(original.name, name);
-    assert.equal(duplicate.name, `language_sample_2.${extension}`);
+    assert.equal(
+      duplicate.name,
+      extension === "java" ? name : `language_sample_2.${extension}`,
+    );
+    assert.notEqual(original.path, duplicate.path);
     assert.equal(await fs.readFile(original.path, "utf8"), content);
     assert.equal(await fs.readFile(duplicate.path, "utf8"), "new source");
+  }
+  const java = {
+    name: "SumNumbers.java",
+    content: "public class SumNumbers { public SumNumbers() {} }",
+  };
+  const javaFiles = await Promise.all(
+    Array.from({ length: 3 }, () => writeArtifact(directory, java)),
+  );
+  assert.equal(new Set(javaFiles.map((a) => a.path)).size, 3);
+  for (const saved of javaFiles) {
+    assert.equal(path.basename(saved.path), "SumNumbers.java");
+    assert.equal(saved.name, "SumNumbers.java");
+    assert.equal(await fs.readFile(saved.path, "utf8"), java.content);
+    assert.ok(saved.path.startsWith(directory + path.sep));
   }
   console.log(
     "Artifact files: readable disk names, concurrent collisions, case-insensitive collisions and original content preservation passed.",

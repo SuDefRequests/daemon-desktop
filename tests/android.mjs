@@ -128,9 +128,7 @@ try {
     assert.match(await page.locator(".thinking-button").innerText(), /Middle/);
     await page.getByRole("textbox", { name: "Your prompt" }).fill(prompt);
     await page.getByRole("button", { name: "Send prompt" }).click();
-    await page
-      .getByText("Waiting for the Android brain…", { exact: true })
-      .waitFor();
+    await page.locator(".loading[role='status']").waitFor();
     await assert.rejects(
       page.evaluate(() => window.daemon.generate("Concurrent request")),
       /already in progress/,
@@ -230,7 +228,7 @@ try {
     ["typescript", ".ts", "const sample: number = 1;"],
     ["c", ".c", "int main(void) { return 0; }"],
     ["cpp", ".cpp", "int main() { return 0; }"],
-    ["java", ".java", "class Student {}"],
+    ["java", ".java", "public class Student { public Student() {} }"],
     ["html", ".html", "<h1>Language sample</h1>"],
     ["css", ".css", "body { color: red; }"],
     ["rust", ".rs", "fn main() {}"],
@@ -256,6 +254,7 @@ try {
     const artifact = workspace.artifacts.find((a) => !ids.includes(a.id));
     assert.equal(path.extname(artifact.name), extension);
     assert.equal(path.basename(artifact.path), artifact.name);
+    if (language === "java") assert.equal(artifact.name, "Student.java");
     assert.ok(!artifact.name.includes("unsafe"));
     assert.equal(await readFile(artifact.path, "utf8"), content);
     await page.getByRole("button", { name: "Preview", exact: true }).click();
@@ -290,6 +289,39 @@ try {
       (await page.evaluate(() => window.daemon.load())).artifacts.length,
       savedCount,
     );
+    if (language === "java") {
+      await submit(
+        {
+          data: {
+            action: "automate_vscode",
+            language,
+            filename: "Student.java",
+            content,
+          },
+        },
+        "Write Java code for language sample",
+      );
+      const duplicate = (
+        await page.evaluate(() => window.daemon.load())
+      ).artifacts.find(
+        (a) => a.name === "Student.java" && a.id !== artifact.id,
+      );
+      assert.ok(duplicate);
+      assert.notEqual(duplicate.path, artifact.path);
+      assert.equal(path.basename(duplicate.path), "Student.java");
+      assert.equal(await readFile(duplicate.path, "utf8"), content);
+      assert.equal(await readFile(artifact.path, "utf8"), content);
+      await page.getByRole("button", { name: "Preview", exact: true }).click();
+      assert.equal(await page.locator("pre").innerText(), content);
+      await page.getByRole("button", { name: "Close dialog" }).click();
+      await page
+        .getByRole("button", { name: "Show in folder", exact: true })
+        .click();
+      assert.equal(
+        (await app.evaluate(() => globalThis.languageReveals)).at(-1),
+        duplicate.path,
+      );
+    }
   }
   const before = (await page.evaluate(() => window.daemon.load())).artifacts
     .length;

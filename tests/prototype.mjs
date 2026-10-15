@@ -418,6 +418,81 @@ try {
     "document.md",
     "cafe_meeting_notes.md",
   ]);
+  const codeNames = await page.evaluate(async () => {
+    const { codeFilename } = await import("/src/filenames.ts");
+    const { createProvider } = await import("/src/inference.ts");
+    const cases = [
+      [
+        "Write a Python program for factorial",
+        ".py",
+        "def factorial(n): return 1",
+        "factorial.py",
+      ],
+      ["Write JavaScript code for a calculator", ".js", "", "calculator.js"],
+      ["Write TypeScript code for a calculator", ".ts", "", "calculator.ts"],
+      ["Write a C program for binary search", ".c", "", "binary_search.c"],
+      [
+        "Create a C++ program for binary search",
+        ".cpp",
+        "",
+        "BinarySearch.cpp",
+      ],
+      [
+        "Write a Java program for adding 5 numbers",
+        ".java",
+        "public class SumNumbers { public SumNumbers() {} }",
+        "SumNumbers.java",
+      ],
+      ["Create a basic HTML portfolio page", ".html", "", "portfolio.html"],
+      ["Create CSS for a portfolio", ".css", "", "portfolio.css"],
+      ["Write Rust code for binary search", ".rs", "", "binary_search.rs"],
+      ["Write Go code for binary search", ".go", "", "binary_search.go"],
+      ["Write a Bash script to list files", ".sh", "", "list_files.sh"],
+      ["Java program for adding 5 numbers", ".java", "", "SumNumbers.java"],
+      ["Write Python code for ../CON", ".py", "", "daemon_con.py"],
+      ["Write Python code for !!!", ".py", "", "program.py"],
+      [
+        "Write Python code for a long descriptive task with many other words",
+        ".py",
+        "",
+        "long_descriptive_task.py",
+      ],
+      [
+        "Generate Java code",
+        ".java",
+        '/* public class Wrong {} */ public class Right { String text = "public class Fake {}"; public class Inner {} }',
+        "Right.java",
+      ],
+    ];
+    for (const [prompt, extension, content, expected] of cases) {
+      if (codeFilename(prompt, extension, content) !== expected)
+        throw new Error(`Unexpected filename for ${prompt}`);
+      const result = await createProvider("android", {
+        generate: async () => ({
+          reply: "Done",
+          file: { kind: "code", extension, content },
+        }),
+      }).generate({ prompt, task: "code" });
+      if (result.file.name !== expected || result.file.content !== content)
+        throw new Error("Provider changed the filename or source");
+    }
+    for (const content of [
+      "public class CON {}",
+      "public class Café {}",
+      "public class Dollar$Name {}",
+    ]) {
+      let rejected = false;
+      try {
+        codeFilename("Java code", ".java", content);
+      } catch {
+        rejected = true;
+      }
+      if (!rejected)
+        throw new Error("Nonportable Java type was silently renamed");
+    }
+    return cases.length;
+  });
+  assert.equal(codeNames, 16);
   // CSS completion drives exits, including reduced motion; closing controls are inert.
   await page.locator(".model-button").click();
   await page.locator(".model-menu.entering").waitFor();
