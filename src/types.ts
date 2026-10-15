@@ -28,6 +28,7 @@ export interface InferenceRequest {
 }
 export interface InferenceResult {
   reply: string;
+  files?: NonNullable<InferenceResult["file"]>[];
   file?: {
     name: string;
     content: string;
@@ -37,6 +38,7 @@ export interface InferenceResult {
 }
 export interface BrainResult {
   reply: string;
+  files?: NonNullable<BrainResult["file"]>[];
   file?: {
     presentationStatus?: PresentationStatus;
     content: string;
@@ -70,6 +72,7 @@ export interface Message {
   content: string;
   createdAt: string;
   artifactId?: string;
+  artifactIds?: string[];
   source?: ProviderMode;
 }
 export interface Conversation {
