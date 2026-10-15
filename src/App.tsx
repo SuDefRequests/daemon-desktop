@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import AnimatedMenu from "./AnimatedMenu";
+import { artifactOpenAction } from "./artifact-actions";
 import {
   ArrowUp,
   ArrowRight,
@@ -34,6 +35,7 @@ import {
 } from "lucide-react";
 import type {
   Artifact,
+  SavedArtifact,
   Conversation,
   Task,
   Workspace,
@@ -390,7 +392,7 @@ export default function App() {
         prompt: content,
         task,
       });
-      let artifact: Artifact | undefined;
+      let artifact: SavedArtifact | undefined;
       if (result.file) {
         artifact = await saveArtifact(
           {
@@ -400,6 +402,9 @@ export default function App() {
             kind: result.file.kind,
             source: provider.mode,
             content: result.file.content,
+            ...(result.file.presentationStatus
+              ? { presentationStatus: result.file.presentationStatus }
+              : {}),
             createdAt: new Date().toISOString(),
           },
           dataRef.current.artifacts,
@@ -436,8 +441,9 @@ export default function App() {
       if (artifact && persisted)
         notify(
           window.daemon
-            ? `Saved ${artifact.name} to your output directory.`
+            ? `Saved ${artifact.name}. ${artifact.opening?.status === "failed" ? `Automatic opening failed: ${artifact.opening.message} Use the file actions to try again.` : artifact.opening?.message || ""}`
             : `Saved ${artifact.name} in browser storage. Download to save a copy.`,
+          artifact.opening?.status === "failed",
         );
     } catch (e) {
       notify(
@@ -452,9 +458,9 @@ export default function App() {
   }
   async function fileAction(a: Artifact, kind: "open" | "reveal" | "download") {
     try {
-      if (kind === "download") downloadArtifact(a);
+      if (kind === "download") await downloadArtifact(a);
       else if (window.daemon) {
-        if (kind === "open") await window.daemon.openArtifact(a.id);
+        if (kind === "open") notify((await window.daemon.openArtifact(a.id)).message);
         else await window.daemon.revealArtifact(a.id);
       }
     } catch (e) {
@@ -632,16 +638,12 @@ export default function App() {
       {window.daemon && (
         <>
           <button
-            disabled={a.name.endsWith(".py")}
-            title={
-              a.name.endsWith(".py")
-                ? "Use Preview or Show in folder. System associations can execute Python."
-                : "Open with the default application"
-            }
+            disabled={!artifactOpenAction(a.name).enabled}
+            title={artifactOpenAction(a.name).title}
             onClick={() => void fileAction(a, "open")}
           >
             <ExternalLink size={15} />
-            Open file
+            {artifactOpenAction(a.name).label}
           </button>
           <button onClick={() => void fileAction(a, "reveal")}>
             <FolderOpen size={15} />
@@ -1133,7 +1135,7 @@ export default function App() {
                 <p>
                   {isMock
                     ? "Mock mode does not contact the device."
-                    : "VIDUR AI checks USB authorization, verifies forwarding and probes the brain service. This does not test model inference."}{" "}
+                    : "VIDUR AI checks USB authorization, verifies forwarding and probes the brain service."}{" "}
                   Model and thinking preferences do not alter the backend.
                 </p>
               </div>
