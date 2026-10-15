@@ -69,7 +69,12 @@ export interface Workspace {
   conversations: Conversation[];
   artifacts: Artifact[];
 }
+export interface UserPreferences {
+  preferredName: string;
+}
 export interface DesktopAPI {
+  getPreferences(): Promise<UserPreferences>;
+  setPreferredName(name: string): Promise<UserPreferences>;
   getDeviceStatus(): Promise<ConnectionStatus>;
   refreshDeviceStatus(): Promise<ConnectionStatus>;
   onDeviceStatus(callback: (status: ConnectionStatus) => void): () => void;
