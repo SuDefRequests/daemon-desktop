@@ -109,6 +109,12 @@ def get_intent(text):
     return min(matches)[1] if matches else "chat"
 
 
+@app.route('/health', methods=['GET'])
+def health():
+    # Liveness only: never run inference or claim that Qwen is ready.
+    return jsonify({"service": "vidur-brain", "status": "ok"})
+
+
 @app.route('/process', methods=['POST'])
 def process_command():
     req_start = time.perf_counter()
