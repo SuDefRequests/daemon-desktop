@@ -112,7 +112,18 @@ try {
     await app.evaluate((_electron, fixture) => {
       globalThis.daemonFixture = fixture;
     }, fixture);
+    const beforeRequests = await app.evaluate(
+      () => globalThis.daemonRequests.length,
+    );
     await page.getByRole("button", { name: "New chat", exact: true }).click();
+    await page
+      .getByRole("heading", { name: "Where shall we begin?", exact: true })
+      .waitFor();
+    assert.equal(
+      await app.evaluate(() => globalThis.daemonRequests.length),
+      beforeRequests,
+    );
+    assert.equal(await page.locator(".message, .productivity-card").count(), 0);
     assert.match(
       await page.locator(".model-button").innerText(),
       /VIDUR AI Compact/,

@@ -1,5 +1,6 @@
 import { createServer } from "vite";
 import { verifySidebar } from "./sidebar.mjs";
+import { verifyNewChatPreferences } from "./new-chat.mjs";
 import { chromium, _electron as electron } from "playwright";
 import assert from "node:assert/strict";
 import { mkdir, readFile, mkdtemp } from "node:fs/promises";
@@ -161,6 +162,7 @@ try {
   await page
     .getByRole("button", { name: "Calculation example", exact: true })
     .waitFor();
+  await verifyNewChatPreferences(page);
   await page
     .getByRole("button", { name: "Calculation example", exact: true })
     .click();
@@ -317,6 +319,7 @@ try {
     ],
   ]) {
     await page.getByRole("button", { name: "New chat", exact: true }).click();
+    await page.getByRole("button", { name: "Home", exact: true }).click();
     await page.getByRole("button", { name: new RegExp(card) }).click();
     await page.getByRole("textbox", { name: "Your prompt" }).fill(taskPrompt);
     await page.getByRole("button", { name: "Send prompt" }).click();
@@ -352,6 +355,7 @@ try {
   }
   // Repeating the same task allocates a readable suffix; the original stays intact.
   await page.getByRole("button", { name: "New chat", exact: true }).click();
+  await page.getByRole("button", { name: "Home", exact: true }).click();
   await page.getByRole("button", { name: /Write code/ }).click();
   await page
     .getByRole("textbox", { name: "Your prompt" })
@@ -445,6 +449,7 @@ try {
     });
   }
   await page.getByRole("button", { name: "New chat", exact: true }).click();
+  await page.getByRole("button", { name: "Home", exact: true }).click();
   await page
     .locator(".productivity-card")
     .filter({ hasText: "Draft a document" })
@@ -509,6 +514,39 @@ try {
       /Broken history/,
     );
     await page.evaluate(() => localStorage.removeItem("daemon-workspace-v1"));
+  }
+  if (mode) {
+    const savedSettings = JSON.parse(
+      await readFile(path.join(temp, "profile", "settings.json"), "utf8"),
+    );
+    assert.equal(
+      savedSettings.preferredName,
+      "Mira",
+      "Output directory changes preserve the name",
+    );
+    assert.equal(typeof savedSettings.outputDirectory, "string");
+    await desktop.close();
+    desktop = await electron.launch({
+      args: [".", `--user-data-dir=${temp}/profile`],
+      env: {
+        ...process.env,
+        DAEMON_DEV: "1",
+        DAEMON_DEV_URL: devURL,
+        DAEMON_PROVIDER: "mock",
+        DAEMON_SAVE_DIR: `${temp}/output`,
+      },
+    });
+    page = await desktop.firstWindow();
+    await page
+      .getByRole("heading", { name: "VIDUR AI", exact: true })
+      .waitFor();
+    await page.getByRole("button", { name: "New chat", exact: true }).click();
+    await page
+      .getByRole("heading", {
+        name: "Where shall we begin, Mira?",
+        exact: true,
+      })
+      .waitFor();
   }
   console.log(
     `${mode ? "Electron" : "Browser"}: persistence, chat switching, rename, delete confirmation, retained artifacts, previews, file actions, model selector and disconnected states passed.`,
