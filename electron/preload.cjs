@@ -1,5 +1,7 @@
 const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("daemon", {
+  getPreferences: () => ipcRenderer.invoke("preferences:get"),
+  setPreferredName: (name) => ipcRenderer.invoke("preferences:name", name),
   getDeviceStatus: () => ipcRenderer.invoke("device:status"),
   refreshDeviceStatus: () => ipcRenderer.invoke("device:refresh"),
   onDeviceStatus: (callback) => {

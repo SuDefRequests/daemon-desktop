@@ -5,6 +5,19 @@ const { writeArtifact } = require("./artifact-files.cjs");
 const inference = require("./inference.cjs");
 let win, outputDirectory, deviceMonitor;
 let workspace = { conversations: [], artifacts: [] };
+let settings = {},
+  settingsError;
+function preferredName(value) {
+  if (
+    typeof value !== "string" ||
+    value.length > 80 ||
+    /[\u0000-\u001f\u007f]/.test(value)
+  )
+    throw new Error(
+      "Preferred name must be at most 80 characters without control characters.",
+    );
+  return value.trim();
+}
 let queue = Promise.resolve();
 function serialize(fn) {
   const operation = queue.catch(() => {}).then(fn);
@@ -127,13 +140,38 @@ app.whenReady().then(async () => {
     process.env.DAEMON_SAVE_DIR ||
     path.join(app.getPath("documents"), "DAEMON");
   try {
-    const settings = JSON.parse(await fs.readFile(settingsFile(), "utf8"));
+    const savedSettings = JSON.parse(await fs.readFile(settingsFile(), "utf8"));
+    if (
+      !savedSettings ||
+      typeof savedSettings !== "object" ||
+      Array.isArray(savedSettings)
+    )
+      throw new Error("Saved preferences are invalid.");
+    preferredName(savedSettings.preferredName ?? "");
+    settings = savedSettings;
     if (typeof settings.outputDirectory === "string")
       outputDirectory = settings.outputDirectory;
   } catch (e) {
-    if (e.code !== "ENOENT")
+    if (e.code !== "ENOENT") {
+      settingsError =
+        "Unable to load local preferences. Original settings file preserved.";
       console.error("Unable to load settings:", e.message);
+    }
   }
+  handle("preferences:get", () => {
+    if (settingsError) throw new Error(settingsError);
+    return { preferredName: preferredName(settings.preferredName ?? "") };
+  });
+  handle("preferences:name", (value) => {
+    if (settingsError) throw new Error(settingsError);
+    const name = preferredName(value);
+    return serialize(async () => {
+      const next = { ...settings, preferredName: name };
+      await atomicWrite(settingsFile(), next);
+      settings = next;
+      return { preferredName: name };
+    });
+  });
   let loadError;
   try {
     const saved = JSON.parse(await fs.readFile(dataFile(), "utf8"));
@@ -196,9 +234,14 @@ app.whenReady().then(async () => {
     });
     if (result.canceled) return null;
     const chosen = result.filePaths[0];
-    await atomicWrite(settingsFile(), { outputDirectory: chosen });
-    outputDirectory = chosen;
-    return chosen;
+    if (settingsError) throw new Error(settingsError);
+    return serialize(async () => {
+      const next = { ...settings, outputDirectory: chosen };
+      await atomicWrite(settingsFile(), next);
+      settings = next;
+      outputDirectory = chosen;
+      return chosen;
+    });
   });
   win = new BrowserWindow({
     width: 1440,
