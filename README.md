@@ -1,6 +1,6 @@
 # DAEMON Desktop
 
-Electron + React + TypeScript + Vite + Tailwind CSS + Lucide. A desktop integration foundation based on the supplied reference, with mock mode by default and an optional Android-brain provider.
+Electron + React + TypeScript + Vite + Tailwind CSS + Lucide. A desktop integration foundation based on the supplied reference, with Android inference by default in desktop development and an explicit mock option.
 
 ```bash
 cd /home/suraj_null/daemon-desktop
@@ -8,7 +8,7 @@ npm install
 npm run dev           # browser at http://127.0.0.1:5173
 ```
 
-For desktop development, stop the browser dev server first (both commands use port 5173):
+Desktop development starts its own Vite server, selecting the next available port when 5173 is occupied. Electron receives that exact URL; no existing processes are terminated:
 
 ```bash
 npm run electron:dev  # starts Vite, waits for readiness, launches Electron
@@ -50,47 +50,51 @@ The composer offers Qwen2.5 0.5B — Local and DAEMON Compact — Demo option. T
 
 ## Existing Python integration
 
-`../Downloads/daemon_brain_v4.py` and `../Downloads/Daemon_UI_v6.py` remain unchanged. The intended deployment runs the brain on Android port 5000 and llama-server on that same phone's localhost port 8080. Establish authorized USB ADB forwarding separately: `adb forward tcp:5000 tcp:5000`. Electron does not launch Python, ADB or arbitrary shell commands.
+`brain/daemon_brain_v4.py` is the phone-side Flask brain. Deploy this updated copy to Android and restart it; the legacy desktop Python UI is unchanged. The intended deployment runs the brain on Android port 5000 and llama-server on that same phone's localhost port 8080. Establish authorized USB ADB forwarding separately: `adb forward tcp:5000 tcp:5000`. Electron does not launch Python, ADB or arbitrary shell commands.
 
-Provider selection is fixed for an Electron session by `DAEMON_PROVIDER=mock` (default) or `DAEMON_PROVIDER=android`. Unsupported values are rejected. Browser preview always uses mock mode. Restart Electron with mock mode when the phone is unavailable; real failures never silently substitute a mock response.
+Provider selection is fixed for an Electron session by `DAEMON_PROVIDER=mock` or `DAEMON_PROVIDER=android`. Desktop development defaults to Android; compiled launches retain mock as their default. Unsupported values are rejected. Browser preview always uses mock mode. Restart Electron with mock mode when the phone is unavailable; real failures never silently substitute a mock response.
 
 ```bash
-# Fedora, after stopping any existing dev server:
-DAEMON_PROVIDER=android npm run electron:dev
+# Fedora: Android is the development default
+npm run electron:dev
+# Explicit mock development:
+DAEMON_PROVIDER=mock npm run electron:dev
 # Or, after a build:
 DAEMON_PROVIDER=android npm run electron:start
 ```
 
 ```powershell
 # Windows PowerShell:
-$env:DAEMON_PROVIDER = "android"
-npm run electron:dev
+npm run electron:dev  # Android by default
 # To return to mock mode before the next launch:
 $env:DAEMON_PROVIDER = "mock"
 ```
 
-The boundary is React `InferenceProvider` → preload `generate(prompt)` → validated `inference:generate` IPC → main-process HTTP `POST http://127.0.0.1:5000/process` with only `{ "prompt": "..." }`. The renderer cannot supply a URL. Redirects are rejected. Prompt length is capped at 12,000 characters; the response body is capped at 2.1 MB and content at 2 million characters. The 260-second timeout covers connection and body reading. HTTP errors, malformed JSON, missing fields, unsupported actions, empty content and `Error:` payloads are rejected. Only one real request per window is allowed at a time, and the lock/loading state clears on failures.
+The boundary is React `InferenceProvider` → preload `generate(prompt)` → validated `inference:generate` IPC → main-process HTTP `POST http://127.0.0.1:5000/process` with only `{ "prompt": "..." }`. The renderer cannot supply a URL. Redirects are rejected. Prompt length is capped at 12,000 characters; the response body is capped at 2.1 MB and content at 2 million characters. The 600-second desktop timeout (longer than the brain’s 240-second llama-server request timeout) covers connection and body reading. HTTP errors, malformed JSON, missing fields, unsupported actions, empty content and `Error:` payloads are rejected. Only one real request per window is allowed at a time, and the lock/loading state clears on failures.
 
 Phone status stays explicitly unverified in Android mode; neither provider configuration nor ADB forwarding proves a physical connection. The model name is an expected configuration, not detection. The brain receives individual prompts, not chat history or the UI's task preference.
+
+The `chat` response uses `{ "action": "chat", "content": "...", "filename": "" }` and produces only an assistant message, never a file. Explicit creation requests retain artifact actions; ordinary questions default to chat, and the original prompt case reaches Qwen.
 
 Returned `filename` is validated as a field but never used as a path or authoritative format. `automate_vscode` becomes `.py`; `automate_excel` must be consistent CSV and becomes `.csv`; `automate_notepad`, `automate_word` and `automate_ppt` become `.md` when Markdown markers are recognized, otherwise `.txt`. Text is never given Office extensions. CSV with inconsistent columns or unsupported Python fences produces a clear error. Canva produces an explanation and search phrase without creating a file or opening a browser. No generated Python is executed. Real Office document conversion is outside this foundation.
 
 ## Verification
 
-With `npm run dev` running in another terminal:
+Tests start their own isolated Vite servers; no separate dev server is required:
 
 ```bash
 npm test                       # browser integration checks
 TEST_ELECTRON=1 npm test        # desktop checks; needs a graphical session
+python tests/brain.py           # dependency-free brain routing/schema checks
 node tests/artifact-files.cjs   # filesystem collision/concurrent writer checks
 npm run test:android           # Android mode with main-process HTTP fixtures; no phone request
 ```
 
-`npm test` includes connector and filesystem tests before the existing browser workflow checks. Electron tests use isolated temporary profiles/output directories. Coverage includes both providers, session-only model/thinking selections, prompt-only requests, all returned actions, JSON/HTTP/application/network errors, actual connection/body timeout aborts, bounded responses, loading cleanup, artifact preview/download, history after reload, rename, chat switching, deletion confirmation, retained files and restricted IPC. Screenshots go to `test-results/`.
+`npm test` includes port-selection, connector and filesystem tests before the existing browser workflow checks. Electron tests use isolated temporary profiles/output directories. Coverage includes both providers, session-only model/thinking selections, prompt-only requests, all returned actions, JSON/HTTP/application/network errors, actual connection/body timeout aborts, bounded responses, loading cleanup, artifact preview/download, history after reload, rename, chat switching, deletion confirmation, retained files and restricted IPC. Screenshots go to `test-results/`.
 
 Android-provider UI tests intercept HTTP in the main process. They exercise the real provider and IPC but do not establish physical phone inference. USB authorization, phone services/model loading and an actual end-to-end request still require the Android device.
 
-Verified: production build, browser workflow checks and Electron workflow checks pass. Desktop tests verify all four files on disk and configurable output directories. Open-file and show-in-folder dispatch are verified with stubbed OS handlers, avoiding external application launches. The separate `electron:dev` command was also launched on Fedora.
+Verified: production build, browser workflow checks and Electron workflow checks pass. Desktop tests verify all four files on disk and configurable output directories. Open-file and show-in-folder dispatch are verified with stubbed OS handlers, avoiding external application launches. The separate `electron:dev` command was also launched on Fedora, including occupied-port fallback and rejection of a duplicate development window. Automated tests use isolated Vite URLs. Windows startup and physical inference require manual verification.
 
 Fedora desktop was used for development. Windows source support uses Electron's portable path/dialog/shell APIs; Windows has not yet been tested. This foundation has no installer/package workflow.
 
