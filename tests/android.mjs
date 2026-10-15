@@ -23,7 +23,7 @@ try {
     },
   });
   page = await app.firstWindow();
-  await page.getByRole("heading", { name: "DAEMON", exact: true }).waitFor();
+  await page.getByRole("heading", { name: "VIDUR AI", exact: true }).waitFor();
   await page.waitForFunction(
     () => !document.querySelector("textarea").disabled,
   );
@@ -33,13 +33,18 @@ try {
   );
   assert.match(
     await page.locator(".connection-pill").innerText(),
-    /unverified/,
+    /Connected|Connection|Device|ADB|Authorization|Forwarding|Brain|Select/,
   );
   await app.evaluate(() => {
     globalThis.daemonRequests = [];
     globalThis.daemonFixture = {};
     // Intercept in main: no request is made to a phone or a local service.
     globalThis.fetch = async (url, options) => {
+      if (url.endsWith("/health"))
+        return new Response(
+          JSON.stringify({ service: "vidur-brain", status: "ok" }),
+          { headers: { "content-type": "application/json" } },
+        );
       globalThis.daemonRequests.push({
         url,
         body: JSON.parse(options.body),
@@ -61,9 +66,40 @@ try {
       });
     };
   });
+  // Push the same main-process snapshot consumed by all three status surfaces.
+  async function assertStatus(state, label, detail) {
+    await app.evaluate(
+      ({ BrowserWindow }, snapshot) => {
+        BrowserWindow.getAllWindows()[0].webContents.send(
+          "device:status",
+          snapshot,
+        );
+      },
+      { state, label, detail },
+    );
+    await page.waitForFunction(
+      (label) =>
+        [".connection-pill", ".sidebar-status", ".home-footnote"].every(
+          (selector) =>
+            document.querySelector(selector)?.textContent.includes(label),
+        ),
+      label,
+    );
+    assert.equal(
+      await page.getByText("Demo settings · UI only", { exact: true }).count(),
+      0,
+    );
+  }
+  for (const [state, label] of [
+    ["disconnected", "Device not connected"],
+    ["unauthorized", "Authorization required"],
+    ["brain-unavailable", "Brain service unavailable"],
+    ["connected", "Connected"],
+  ])
+    await assertStatus(state, label, "Fixture device status");
   await page.locator(".model-button").click();
   await page
-    .getByRole("button", { name: /DAEMON Compact — Demo option/ })
+    .getByRole("button", { name: /VIDUR AI Compact — Demo option/ })
     .click();
   await page
     .getByRole("button", { name: "Thinking mode", exact: true })
@@ -79,7 +115,7 @@ try {
     await page.getByRole("button", { name: "New chat", exact: true }).click();
     assert.match(
       await page.locator(".model-button").innerText(),
-      /DAEMON Compact/,
+      /VIDUR AI Compact/,
     );
     assert.match(await page.locator(".thinking-button").innerText(), /Middle/);
     await page.getByRole("textbox", { name: "Your prompt" }).fill(prompt);
@@ -226,7 +262,7 @@ try {
   }
   assert.match(
     await page.locator(".connection-pill").innerText(),
-    /unverified/,
+    /Connected|Connection|Device|ADB|Authorization|Forwarding|Brain|Select/,
   );
   await assert.rejects(
     page.evaluate(() =>

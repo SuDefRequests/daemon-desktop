@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 source = ast.parse((Path(__file__).resolve().parents[1] / 'brain/daemon_brain_v4.py').read_text())
-functions = [node for node in source.body if isinstance(node, ast.FunctionDef) and node.name in ('get_intent', 'process_command')]
+functions = [node for node in source.body if isinstance(node, ast.FunctionDef) and node.name in ('get_intent', 'process_command', 'health')]
 for node in functions:
     node.decorator_list = []
 seen = []
@@ -31,3 +31,5 @@ for current in chat + list(files):
     if expected == 'chat':
         assert seen[-1] == current and result['filename'] == ''
 print('Brain: chat/default routing, explicit artifact intents, response schema and original prompt case passed.')
+
+assert namespace["health"]() == {"service": "vidur-brain", "status": "ok"}

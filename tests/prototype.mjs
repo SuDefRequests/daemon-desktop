@@ -36,7 +36,7 @@ try {
   }
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  await page.getByRole("heading", { name: "DAEMON", exact: true }).waitFor();
+  await page.getByRole("heading", { name: "VIDUR AI", exact: true }).waitFor();
   assert.equal(await page.locator("header .model-button").count(), 0);
   assert.equal(await page.locator(".composer .model-button").count(), 1);
   await page.getByRole("button", { name: "Collapse sidebar" }).click();
@@ -44,11 +44,11 @@ try {
   await page.locator(".model-button").click();
   assert.equal(await page.locator(".model-menu > button").count(), 2);
   await page
-    .getByRole("button", { name: /DAEMON Compact — Demo option/ })
+    .getByRole("button", { name: /VIDUR AI Compact — Demo option/ })
     .click();
   assert.match(
     await page.locator(".model-button").innerText(),
-    /DAEMON Compact/,
+    /VIDUR AI Compact/,
   );
   await page
     .getByRole("button", { name: "Thinking mode", exact: true })
@@ -139,7 +139,7 @@ try {
   await page.getByText("calculate_a_total.py", { exact: true }).waitFor();
   assert.match(
     await page.locator(".model-button").innerText(),
-    /DAEMON Compact/,
+    /VIDUR AI Compact/,
   );
   assert.match(await page.locator(".thinking-button").innerText(), /Extended/);
 
@@ -452,7 +452,7 @@ try {
   await page
     .getByRole("button", { name: "Device & model", exact: true })
     .click();
-  await page.getByRole("heading", { name: "Device disconnected" }).waitFor();
+  await page.getByRole("heading", { name: "Mock mode" }).waitFor();
   if (!mode) {
     await page.setViewportSize({ width: 900, height: 720 });
     await page.getByRole("button", { name: "Home", exact: true }).click();

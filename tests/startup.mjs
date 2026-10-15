@@ -15,7 +15,7 @@ try {
   await vite.listen();
   const actual = devURL.validateDevURL(vite.resolvedUrls.local[0]);
   assert.notEqual(new URL(actual).port, String(port));
-  assert.match(await (await fetch(actual)).text(), /DAEMON/);
+  assert.match(await (await fetch(actual)).text(), /VIDUR AI/);
   assert.equal(
     await (await fetch(`http://127.0.0.1:${port}`)).text(),
     "unrelated application",
