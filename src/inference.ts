@@ -17,6 +17,7 @@ export function createProvider(
         );
       // Only the prompt crosses IPC. Task, model and thinking preferences stay in the UI.
       const result = await desktop.generate(prompt);
+      if (!result.file) return { reply: result.reply };
       return {
         ...result,
         file: result.file
