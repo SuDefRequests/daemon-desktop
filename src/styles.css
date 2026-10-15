@@ -60,28 +60,53 @@ button svg {
   background: #121416;
 }
 .sidebar {
+  --sidebar-motion: 240ms cubic-bezier(0.2, 0, 0, 1);
   width: 270px;
+  transition:
+    width var(--sidebar-motion),
+    padding-inline var(--sidebar-motion);
   flex-shrink: 0;
   border-right: 1px solid #25272a;
   display: flex;
   flex-direction: column;
   background: #101214;
-  padding: 27px 17px 18px;
+  padding: 27px 16px 18px;
 }
 .brand {
-  display: flex;
-  align-items: center;
-  gap: 13px;
-  margin: 0 8px 29px;
+  position: relative;
+  flex-shrink: 0;
+  height: 36px;
+  margin: 0 0 16px;
 }
-.brand img {
+.brand-logo {
+  position: absolute;
+  top: 0;
+  left: 4px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  pointer-events: none;
+}
+.brand-logo img {
+  display: block;
   width: 36px;
   height: 36px;
 }
+.sidebar-collapsed .brand-logo {
+  pointer-events: auto;
+}
 .brand > span {
-  font-size: 19px;
+  position: absolute;
+  left: 48px;
+  top: 6px;
+  max-width: calc(100% - 116px);
+  overflow: hidden;
+  font-size: 16px;
   font-weight: 650;
-  letter-spacing: 1.2px;
+  letter-spacing: 0.5px;
 }
 .icon-button {
   background: none;
@@ -97,38 +122,94 @@ button svg {
   background: #292c30;
   color: #fff;
 }
-.sidebar-toggle {
-  margin-left: auto;
+.sidebar-toggle,
+.sidebar-search {
+  position: absolute;
+  top: 2px;
+  right: 0;
+  width: 32px;
+  height: 32px;
+  transition:
+    top var(--sidebar-motion),
+    right var(--sidebar-motion),
+    width var(--sidebar-motion),
+    height var(--sidebar-motion),
+    opacity 100ms,
+    visibility 0s,
+    background 160ms,
+    color 160ms;
+}
+.sidebar-search {
+  right: 36px;
+}
+.sidebar-collapsed .sidebar-search {
+  top: 100px;
+  right: 1px;
+  width: 44px;
+  height: 44px;
+}
+.sidebar :is(.new-chat, nav button, .sidebar-toggle, .sidebar-search) > svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 1.75;
+}
+.sidebar :is(.brand > span, nav button > span, .new-chat > span) {
+  white-space: nowrap;
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity 150ms ease 70ms,
+    visibility 0s;
+}
+:where(.sidebar) :is(nav button, .new-chat) {
+  flex-shrink: 0;
+  overflow: hidden;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 11px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  text-align: left;
+  font-size: 14px;
+}
+
+.sidebar :is(.recent, .sidebar-status) {
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity 150ms ease 70ms,
+    visibility 0s;
 }
 .new-chat {
-  display: flex;
-  gap: 13px;
-  align-items: center;
-  text-align: left;
-  border: 1px solid #2b2e32;
-  background: #1b1e21;
-  border-radius: 12px;
-  padding: 15px 14px;
-  margin-bottom: 17px;
-  font-size: 14px;
+  margin-bottom: 4px;
+  transition:
+    margin-bottom var(--sidebar-motion),
+    background 160ms,
+    border-color 160ms,
+    transform 160ms;
 }
-.new-chat:hover {
-  background: #25282c;
+.sidebar-collapsed .new-chat {
+  margin-bottom: 52px;
 }
+.new-chat:hover:not(:disabled) {
+  background: #222529;
+  border-color: transparent;
+}
+.new-chat:active:not(:disabled) {
+  background: #292c30;
+  border-color: #3b4046;
+}
+.new-chat:focus-visible {
+  background: #222529;
+  outline-offset: 2px;
+}
+
 nav {
   display: grid;
-  gap: 5px;
-}
-nav button {
-  background: transparent;
-  border: 1px solid transparent;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 13px 14px;
-  border-radius: 10px;
-  text-align: left;
-  font-size: 14px;
+  gap: 4px;
 }
 nav button.selected {
   background: #292c30;
@@ -138,8 +219,8 @@ nav button:hover {
   background: #222529;
 }
 .recent {
-  margin: 23px -17px 0;
-  padding: 20px 17px;
+  margin: 23px -16px 0;
+  padding: 20px 16px;
   flex: 1;
   min-height: 0;
   border-top: 1px solid #242629;
@@ -147,6 +228,7 @@ nav button:hover {
   flex-direction: column;
 }
 .recent-heading {
+  white-space: nowrap;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -231,6 +313,10 @@ nav button:hover {
   padding: 14px 10px;
 }
 .sidebar-status {
+  flex-shrink: 0;
+  height: 64px;
+  white-space: nowrap;
+  overflow: hidden;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -258,28 +344,28 @@ nav button:hover {
   flex-shrink: 0;
 }
 .sidebar-collapsed .sidebar {
-  width: 78px;
-  padding-inline: 12px;
+  width: 64px;
+  padding-inline: 9px;
 }
-.sidebar-collapsed .brand {
-  margin: 0 0 22px;
-  flex-direction: column;
-  gap: 14px;
-}
-.sidebar-collapsed .brand > span,
-.sidebar-collapsed nav span,
-.sidebar-collapsed .new-chat span,
-.sidebar-collapsed .recent,
-.sidebar-collapsed .sidebar-status {
-  display: none;
+.sidebar-collapsed
+  :is(
+    .brand > span,
+    nav button > span,
+    .new-chat > span,
+    .recent,
+    .sidebar-status
+  ) {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 100ms ease,
+    visibility 0s 100ms;
 }
 .sidebar-collapsed .sidebar-toggle {
-  margin: auto;
-}
-.sidebar-collapsed nav button,
-.sidebar-collapsed .new-chat {
-  justify-content: center;
-  padding-inline: 8px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 main {
   flex: 1;
@@ -803,7 +889,6 @@ main {
   color: #b49f86 !important;
 }
 
-
 .conversation {
   height: calc(100% - 90px);
   display: flex;
@@ -814,7 +899,6 @@ main {
   margin: 0;
   padding: 0 0 20px;
 }
-
 
 .conversation-title {
   width: calc(100% - 84px);
@@ -846,7 +930,6 @@ main {
   overflow-x: hidden;
   padding: 26px max(47px, calc((100% - 916px) / 2));
 }
-
 
 .message {
   display: flex;
@@ -1367,11 +1450,22 @@ button:disabled {
   }
 }
 
-
 .chat-composer {
   width: 100%;
   max-width: 990px;
   flex-shrink: 0;
   margin-inline: auto;
   padding-inline: 42px;
+}
+.status-dot.connected {
+  background: #46bb83;
+}
+.sidebar-status > span:has(small) {
+  min-width: 0;
+}
+.sidebar-status small {
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
