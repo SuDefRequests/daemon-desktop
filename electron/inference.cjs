@@ -1,4 +1,8 @@
 const { CODE_LANGUAGES, codeFormat } = require("./code-languages.cjs");
+const {
+  presentationSlides,
+  presentationStatus,
+} = require("./presentation.cjs");
 const ENDPOINT = "http://127.0.0.1:5000/process";
 const INFERENCE_TIMEOUT_MS = 600_000;
 const MAX_PROMPT_LENGTH = 12_000;
@@ -152,6 +156,24 @@ function convertResponse(response) {
       );
     if (!text.trim())
       throw new Error(`${label} response is empty. No file was saved.`);
+  } else if (action === "automate_ppt") {
+    presentationSlides(content);
+    const status = presentationStatus(response.generation_status);
+    const notice =
+      status === "partial"
+        ? "Partial model output: the model reached a limit. The deck contains only the text returned."
+        : status === "complete"
+          ? "The model finished generating its script. Review its accuracy and coverage."
+          : "The brain did not report completion status; this output may be partial.";
+    return {
+      reply: `This PowerPoint presentation uses Qwen's returned text, structured into slides locally. ${notice}`,
+      file: {
+        kind: "presentation",
+        extension: ".pptx",
+        content,
+        presentationStatus: status,
+      },
+    };
   } else if (action === "automate_excel") {
     kind = "spreadsheet";
     extension = ".csv";
@@ -160,8 +182,15 @@ function convertResponse(response) {
       throw new Error(
         "Spreadsheet response is not consistent CSV data. No file was saved.",
       );
+  } else if (action === "automate_word") {
+    require("./document.cjs").documentParagraphs(content);
+    return {
+      reply:
+        "This Word document contains the text returned by Qwen. Review its accuracy and completeness.",
+      file: { kind: "document", extension: ".docx", content },
+    };
   } else {
-    kind = action === "automate_ppt" ? "presentation" : "document";
+    kind = "document";
     extension =
       /(^|\n)\s{0,3}(?:#{1,6}\s|[-*+]\s|\d+\.\s|```|>\s)|\*\*[^*\n]+\*\*|__[^_\n]+__|`[^`\n]+`|\[[^\]\n]+\]\([^)\n]+\)/.test(
         content,
@@ -170,13 +199,9 @@ function convertResponse(response) {
         : ".txt";
   }
   const limitation =
-    action === "automate_ppt"
-      ? " This is presentation text, not a PowerPoint deck."
-      : action === "automate_word"
-        ? " This is text, not a Word document."
-        : action === "automate_excel"
-          ? " This is CSV data, not an Excel workbook."
-          : "";
+    action === "automate_excel"
+      ? " This is CSV data, not an Excel workbook."
+      : "";
   return {
     reply: `The Android brain returned content for a ${extension} file.${limitation} Review the artifact before use.`,
     file: { kind, extension, content: text },
