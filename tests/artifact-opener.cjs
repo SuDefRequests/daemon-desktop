@@ -205,6 +205,103 @@ const missing = () => Object.assign(new Error("not found"), { code: "ENOENT" });
       assert.ok(!calls.some(([command]) => command === "reg.exe"));
     assert.ok(calls.every(([, , options]) => options.shell === false));
   }
+  // Reproduce the reported Windows user installation with realistic file checks.
+  const win = require("node:path").win32;
+  const root = "C:\\Users\\Lenovo\\AppData\\Local\\Programs\\Microsoft VS Code";
+  const exe = win.join(root, "Code.exe");
+  const cli = win.join(root, "resources", "app", "out", "cli.js");
+  const target = "C:\\Saved files\\sum & two numbers.py";
+  for (const mode of [
+    "where-code",
+    "path",
+    "local",
+    "system",
+    "configured-code",
+    "configured-cmd",
+    "configured-exe",
+    "launch-error",
+    "broken-cli",
+  ]) {
+    const calls = [];
+    const env =
+      mode === "path"
+        ? { Path: win.join(root, "bin") }
+        : mode === "local"
+          ? { LOCALAPPDATA: "C:\\Users\\Lenovo\\AppData\\Local" }
+          : mode === "system"
+            ? { ProgramFiles: "C:\\Program Files" }
+            : mode.startsWith("configured")
+              ? {
+                  DAEMON_VSCODE_PATH: mode.endsWith("exe")
+                    ? exe
+                    : win.join(
+                        root,
+                        "bin",
+                        mode.endsWith("cmd") ? "code.cmd" : "code",
+                      ),
+                }
+              : {};
+    const expected =
+      mode === "system"
+        ? "C:\\Program Files\\Microsoft VS Code\\Code.exe"
+        : exe;
+    const expectedCli = win.join(
+      win.dirname(expected),
+      "resources",
+      "app",
+      "out",
+      "cli.js",
+    );
+    const opener = createArtifactOpener({
+      platform: "win32",
+      env,
+      realpath: async (p) => p,
+      stat: async (p) => ({
+        isFile: () =>
+          p === target ||
+          p === expected ||
+          (p === expectedCli && mode !== "broken-cli"),
+      }),
+      run: async (command, args, options) => {
+        calls.push([command, args, options]);
+        if (command === "where.exe" && args[0] === "code")
+          return {
+            stdout:
+              win.join(root, "bin", "code") +
+              "\r\n" +
+              win.join(root, "bin", "code.cmd") +
+              "\r\n",
+          };
+        if (command === expected) {
+          if (mode === "launch-error")
+            throw Object.assign(new Error("spawn Code.exe ENOENT (fixture)"), {
+              code: "ENOENT",
+            });
+          return { stdout: "" };
+        }
+        throw missing();
+      },
+    });
+    if (mode === "launch-error") {
+      await assert.rejects(
+        opener.open(target),
+        /discovered.*launching failed: spawn Code.exe ENOENT/,
+      );
+    } else if (mode === "broken-cli") {
+      await assert.rejects(
+        opener.open(target),
+        /discovered.*launcher is missing/,
+      );
+    } else {
+      assert.equal((await opener.open(target)).status, "requested");
+      const [command, args, options] = calls.at(-1);
+      assert.equal(command, expected);
+      assert.deepEqual(args, [expectedCli, "--reuse-window", "--", target]);
+      assert.equal(options.shell, false);
+      assert.equal(options.env.ELECTRON_RUN_AS_NODE, "1");
+      assert.equal(calls.filter(([command]) => command === expected).length, 1);
+    }
+  }
   console.log(
     "Artifact opening: Windows/Fedora associations, all code languages via VS Code, PATH/registry/configured discovery, separate arguments, invalid paths/types, missing apps, launch failures and bounded single attempts passed (mocked launch APIs).",
   );
