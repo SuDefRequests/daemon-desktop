@@ -797,7 +797,7 @@ export default function App() {
                   </div>
                   <div className="message-body">
                     <div className="message-label">
-                      {m.role === "assistant" ? "DAEMON" : "You"}
+                      {m.role === "assistant" ? "VIDUR AI" : "You"}
                       <time>
                         {new Date(m.createdAt).toLocaleTimeString([], {
                           hour: "2-digit",
