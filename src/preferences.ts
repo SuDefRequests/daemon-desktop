@@ -3,13 +3,13 @@ export const models: ModelInfo[] = [
   {
     id: "qwen-local",
     name: "Qwen2.5 0.5B",
-    description: "Local · demo selection; backend model unchanged",
+    description: "Best for daily work reasoning and coding tasks",
     configured: true,
   },
   {
     id: "daemon-compact",
-    name: "DAEMON Compact",
-    description: "Demo option · no additional model installed",
+    name: "VIDUR AI Compact",
+    description: "For complex tasks",
     configured: false,
   },
 ];
