@@ -46,6 +46,8 @@ import {
   saveWorkspace,
   saveArtifact,
   downloadArtifact,
+  loadPreferences,
+  savePreferredName,
 } from "./storage";
 import { configuredProvider, createProvider } from "./inference";
 import { models, thinkingModes, type ThinkingMode } from "./preferences";
@@ -97,6 +99,12 @@ export default function App() {
   const [provider, setProvider] = useState<InferenceProvider>(() =>
     createProvider("mock"),
   );
+  const [preferredName, setPreferredName] = useState("");
+  const [nameDraft, setNameDraft] = useState("");
+  const [preferencesLoading, setPreferencesLoading] = useState(true);
+  const [preferencesError, setPreferencesError] = useState("");
+  const nameEdited = useRef(false);
+  const [savingName, setSavingName] = useState(false);
   const [selectedModel, setSelectedModel] = useState(models[0].id);
   const [thinkingMode, setThinkingMode] = useState<ThinkingMode>("Low");
   const [thinkingMenu, setThinkingMenu] = useState(false);
@@ -188,6 +196,19 @@ export default function App() {
       });
     return saveQueue.current;
   }
+  async function reloadPreferences() {
+    setPreferencesLoading(true);
+    setPreferencesError("");
+    try {
+      const preferences = await loadPreferences();
+      setPreferredName(preferences.preferredName);
+      if (!nameEdited.current) setNameDraft(preferences.preferredName);
+    } catch (e) {
+      setPreferencesError(`Could not load preferences: ${(e as Error).message}`);
+    } finally {
+      setPreferencesLoading(false);
+    }
+  }
   useEffect(() => {
     Promise.all([loadWorkspace(), configuredProvider()])
       .then(([d, configured]) => {
@@ -202,6 +223,7 @@ export default function App() {
           true,
         ),
       );
+    void reloadPreferences();
     window.daemon
       ?.getOutputDirectory()
       .then(setDirectory)
@@ -289,9 +311,12 @@ export default function App() {
     return () => window.removeEventListener("keydown", close);
   }, []);
   const conversation = data.conversations.find((c) => c.id === active);
+  useEffect(() => {
+    if (view === "chat" && !active) textRef.current?.focus();
+  }, [view, active]);
   function newChat() {
     setActive(null);
-    setView("home");
+    setView("chat");
     setPrompt("");
     setTask("chat");
     textRef.current?.focus();
@@ -883,81 +908,97 @@ export default function App() {
           </div>
         )}
         {view === "chat" && (
-          <div className="conversation">
-            <div className="conversation-title">
-              <h2>{conversation?.title || "New conversation"}</h2>
-              <span className="badge">
-                {isMock ? "Mock responses" : "Android provider"}
-              </span>
-            </div>
-            <div className="messages">
-              {conversation?.messages.map((m) => (
-                <article
-                  key={m.id}
-                  className={`message ${m.role} ${animatedMessages.current.has(m.id) ? "message-new" : ""}`}
-                  onAnimationEnd={(event) => {
-                    if (event.target === event.currentTarget)
-                      animatedMessages.current.delete(m.id);
-                  }}
-                >
-                  <div className="message-avatar">
-                    {m.role === "assistant" ? (
-                      <img src="./daemon-logo.svg" alt="" />
-                    ) : (
-                      "You"
-                    )}
-                  </div>
-                  <div className="message-body">
-                    <div className="message-label">
-                      {m.role === "assistant" ? "VIDUR AI" : "You"}
-                      <time>
-                        {new Date(m.createdAt).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </time>
-                    </div>
-                    <p>{m.content}</p>
-                    {m.artifactId &&
-                      (() => {
-                        const a = data.artifacts.find(
-                          (a) => a.id === m.artifactId,
-                        );
-                        return a ? (
-                          <div className="artifact-inline">
-                            <FileText size={22} />
-                            <div>
-                              <strong>{a.name}</strong>
-                              <small>
-                                {a.source === "android"
-                                  ? "Brain artifact"
-                                  : "Sample artifact"}{" "}
-                                · {a.content.length.toLocaleString()} characters
-                              </small>
-                              {fileButtons(a)}
-                            </div>
-                          </div>
-                        ) : null;
-                      })()}
-                  </div>
-                </article>
-              ))}
-              {busy && (
-                <div className="loading" role="status" aria-live="polite">
-                  <LoaderCircle size={17} className="spin" />
-                  {isMock
-                    ? "Preparing a mock response…"
-                    : "Waiting for the Android brain…"}
+          <div
+            className={`conversation${!conversation ? " conversation-empty" : ""}`}
+          >
+            {!conversation ? (
+              <div className="conversation-welcome">
+                <h1>
+                  {preferredName
+                    ? `Where shall we begin, ${preferredName}?`
+                    : "Where shall we begin?"}
+                </h1>
+                <p>I'm here to help you think, create, and get things done.</p>
+              </div>
+            ) : (
+              <>
+                <div className="conversation-title">
+                  <h2>{conversation?.title || "New conversation"}</h2>
+                  <span className="badge">
+                    {isMock ? "Mock responses" : "Android provider"}
+                  </span>
                 </div>
-              )}
-              <div ref={messagesEnd} />
-            </div>
+                <div className="messages">
+                  {conversation?.messages.map((m) => (
+                    <article
+                      key={m.id}
+                      className={`message ${m.role} ${animatedMessages.current.has(m.id) ? "message-new" : ""}`}
+                      onAnimationEnd={(event) => {
+                        if (event.target === event.currentTarget)
+                          animatedMessages.current.delete(m.id);
+                      }}
+                    >
+                      <div className="message-avatar">
+                        {m.role === "assistant" ? (
+                          <img src="./daemon-logo.svg" alt="" />
+                        ) : (
+                          "You"
+                        )}
+                      </div>
+                      <div className="message-body">
+                        <div className="message-label">
+                          {m.role === "assistant" ? "VIDUR AI" : "You"}
+                          <time>
+                            {new Date(m.createdAt).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </time>
+                        </div>
+                        <p>{m.content}</p>
+                        {m.artifactId &&
+                          (() => {
+                            const a = data.artifacts.find(
+                              (a) => a.id === m.artifactId,
+                            );
+                            return a ? (
+                              <div className="artifact-inline">
+                                <FileText size={22} />
+                                <div>
+                                  <strong>{a.name}</strong>
+                                  <small>
+                                    {a.source === "android"
+                                      ? "Brain artifact"
+                                      : "Sample artifact"}{" "}
+                                    · {a.content.length.toLocaleString()}{" "}
+                                    characters
+                                  </small>
+                                  {fileButtons(a)}
+                                </div>
+                              </div>
+                            ) : null;
+                          })()}
+                      </div>
+                    </article>
+                  ))}
+                  {busy && (
+                    <div className="loading" role="status" aria-live="polite">
+                      <LoaderCircle size={17} className="spin" />
+                      {isMock
+                        ? "Preparing a mock response…"
+                        : "Waiting for the Android brain…"}
+                    </div>
+                  )}
+                  <div ref={messagesEnd} />
+                </div>
+              </>
+            )}
             <div className="chat-composer">
               {composer}
               <p className="composer-disclaimer">
                 {isMock
                   ? "Mock mode. No request is sent to the device."
-                  : "Requests use the Android brain. Model and thinking controls are UI-only."}
+                  : ""}
               </p>
             </div>
           </div>
@@ -1090,6 +1131,63 @@ export default function App() {
             <p className="page-subtitle">
               Simple defaults. Local storage. Your choice of output folder.
             </p>
+            <div className="settings-panel">
+              <h3>Personalize your workspace</h3>
+              <form
+                className="name-preference"
+                onSubmit={async (event) => {
+                  event.preventDefault();
+                  if (preferencesLoading || savingName) return;
+                  setSavingName(true);
+                  try {
+                    const saved = await savePreferredName(nameDraft);
+                    setPreferredName(saved.preferredName);
+                    setNameDraft(saved.preferredName);
+                    nameEdited.current = false;
+                    setPreferencesError("");
+                    notify("Preferred name saved.");
+                  } catch (e) {
+                    setPreferencesError(`Could not save preferred name: ${(e as Error).message}`);
+                  } finally {
+                    setSavingName(false);
+                  }
+                }}
+              >
+                <label htmlFor="preferred-name">Preferred name</label>
+                <p id="preferred-name-help">
+                  Optional. Used in your new-chat greeting and saved only on
+                  this device.
+                </p>
+                <div>
+                  <input
+                    id="preferred-name"
+                    value={nameDraft}
+                    maxLength={80}
+                    autoComplete="off"
+                    aria-describedby={`preferred-name-help${preferencesError ? " preferred-name-error" : ""}`}
+                    placeholder="Your name"
+                    disabled={savingName}
+                    onChange={(event) => {
+                      nameEdited.current = true;
+                      setNameDraft(event.target.value);
+                    }}
+                  />
+                  <button
+                    type="submit"
+                    className="secondary-button"
+                    disabled={preferencesLoading || savingName}
+                  >
+                    {savingName ? "Saving…" : "Save name"}
+                  </button>
+                </div>
+                {preferencesLoading && <p role="status">Loading saved name…</p>}
+                {preferencesError && <>
+                  <p id="preferred-name-error" className="browser-note" role="alert">{preferencesError}</p>
+                  <button type="button" className="secondary-button" disabled={preferencesLoading || savingName}
+                    onClick={() => void reloadPreferences()}>Retry loading</button>
+                </>}
+              </form>
+            </div>
             <div className="settings-panel">
               <h3>Generated files</h3>
               <p>
