@@ -37,10 +37,13 @@ function createArtifactOpener({
   };
   const exists = async (file) =>
     (await stat(file).catch(() => null))?.isFile() === true;
-  async function findCode(candidates) {
+  async function findCode(candidates, discovered) {
     for (let candidate of candidates) {
+      candidate = candidate.trim().replace(/^"(.*)"$/, "$1");
       if (!paths.isAbsolute(candidate)) continue;
-      if (paths.basename(candidate).toLowerCase() === "code.cmd")
+      if (
+        ["code.cmd", "code"].includes(paths.basename(candidate).toLowerCase())
+      )
         candidate = paths.resolve(paths.dirname(candidate), "..", "Code.exe");
       if (paths.basename(candidate).toLowerCase() !== "code.exe") continue;
       const cli = paths.join(
@@ -50,23 +53,51 @@ function createArtifactOpener({
         "out",
         "cli.js",
       );
-      if ((await exists(candidate)) && (await exists(cli)))
-        return { executable: candidate, cli };
+      if (await exists(candidate)) {
+        discovered.add(candidate);
+        if (await exists(cli)) return { executable: candidate, cli };
+      }
     }
     return null;
   }
   async function windowsCode(signal) {
+    const discovered = new Set();
     const candidates = [];
     if (env.DAEMON_VSCODE_PATH) candidates.push(env.DAEMON_VSCODE_PATH);
     else {
-      for (const name of ["Code.exe", "code.cmd"]) {
+      // Electron may inherit an older PATH than a newly opened terminal. Inspect
+      // its PATH directly and standard installations as well as where/registry.
+      const value = (key) =>
+        Object.entries(env).find(
+          ([name]) => name.toLowerCase() === key.toLowerCase(),
+        )?.[1];
+      for (const directory of (value("PATH") || "")
+        .split(";")
+        .filter(Boolean)) {
+        const root = directory.trim().replace(/^"(.*)"$/, "$1");
+        candidates.push(
+          paths.join(root, "Code.exe"),
+          paths.join(root, "code.cmd"),
+          paths.join(root, "code"),
+        );
+      }
+      for (const [key, suffix] of [
+        ["LOCALAPPDATA", "Programs\\Microsoft VS Code\\Code.exe"],
+        ["ProgramFiles", "Microsoft VS Code\\Code.exe"],
+        ["ProgramFiles(x86)", "Microsoft VS Code\\Code.exe"],
+      ]) {
+        if (value(key)) candidates.push(paths.join(value(key), suffix));
+      }
+      const installed = await findCode(candidates, discovered);
+      if (installed) return installed;
+      for (const name of ["code", "code.cmd", "Code.exe"]) {
         try {
           const { stdout } = await run("where.exe", [name], {
             ...options,
             signal,
           });
           candidates.push(...stdout.trim().split(/\r?\n/).filter(Boolean));
-          const found = await findCode(candidates);
+          const found = await findCode(candidates, discovered);
           if (found) return found;
         } catch (error) {
           if (error.killed || signal.aborted) throw error;
@@ -93,8 +124,12 @@ function createArtifactOpener({
         }
       }
     }
-    const found = await findCode(candidates);
+    const found = await findCode(candidates, discovered);
     if (found) return found;
+    if (discovered.size)
+      throw new Error(
+        `VS Code was discovered at ${[...discovered].join(", ")}, but its resources/app/out/cli.js launcher is missing or inaccessible. Repair the VS Code installation.`,
+      );
     throw new Error(
       "VS Code was not found. Install it with its PATH option, or set DAEMON_VSCODE_PATH to its Code.exe path and restart VIDUR AI.",
     );
@@ -110,11 +145,18 @@ function createArtifactOpener({
       signal.throwIfAborted();
       // This is VS Code's own CLI entry point, as used by code.cmd. Generated
       // source is only a file argument after '--'; never a runtime entry point.
-      await run(executable, [cli, "--reuse-window", "--", target], {
-        ...options,
-        signal,
-        env: { ...editorEnv, ELECTRON_RUN_AS_NODE: "1" },
-      });
+      try {
+        await run(executable, [cli, "--reuse-window", "--", target], {
+          ...options,
+          signal,
+          env: { ...editorEnv, ELECTRON_RUN_AS_NODE: "1" },
+        });
+      } catch (error) {
+        if (error.killed || signal.aborted) throw error;
+        throw new Error(
+          `VS Code was discovered at ${executable}, but launching failed: ${error.message}`,
+        );
+      }
     } else if (platform === "linux" || platform === "darwin") {
       const executable = env.DAEMON_VSCODE_PATH || "code";
       if (
