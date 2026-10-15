@@ -3,7 +3,7 @@ import AnimatedMenu from "./AnimatedMenu";
 import {
   ArrowUp,
   ArrowRight,
-  Plus,
+  SquarePen,
   Home,
   Folder,
   Smartphone,
@@ -11,7 +11,6 @@ import {
   MessageSquare,
   Search,
   PanelLeftClose,
-  PanelLeftOpen,
   ChevronDown,
   Check,
   Box,
@@ -39,6 +38,7 @@ import type {
   Task,
   Workspace,
   InferenceProvider,
+  ConnectionStatus,
 } from "./types";
 import {
   emptyWorkspace,
@@ -101,9 +101,16 @@ export default function App() {
   const [thinkingMode, setThinkingMode] = useState<ThinkingMode>("Low");
   const [thinkingMenu, setThinkingMenu] = useState(false);
   const isMock = provider.mode === "mock";
-  const deviceLabel = isMock
-    ? "Device disconnected"
-    : "Phone connection unverified";
+  const [connection, setConnection] = useState<ConnectionStatus>({
+    state: "unknown",
+    label: "Connection status unknown",
+    detail: "Checking the Android device and brain service…",
+  });
+  const deviceLabel = isMock ? "Mock mode" : connection.label;
+  const deviceDetail = isMock
+    ? "Simulated responses · device checks are disabled"
+    : connection.detail;
+  const connected = !isMock && connection.state === "connected";
   const [data, setData] = useState<Workspace>(emptyWorkspace),
     [ready, setReady] = useState(false),
     [view, setView] = useState<View>("home"),
@@ -129,6 +136,35 @@ export default function App() {
     [directory, setDirectory] = useState(
       "Browser storage · download files to save a copy",
     );
+  const sidebarRef = useRef<HTMLElement>(null),
+    searchRef = useRef<HTMLInputElement>(null),
+    searchFocusPending = useRef(false);
+  function openConversationSearch() {
+    setMenu(null);
+    if (collapsed) {
+      searchFocusPending.current = true;
+      setCollapsed(false);
+    } else searchRef.current?.focus();
+  }
+  useEffect(() => {
+    if (collapsed || !searchFocusPending.current) return;
+    let cancelled = false;
+    const frame = requestAnimationFrame(() => {
+      const animations = sidebarRef.current?.getAnimations() ?? [];
+      void Promise.all(
+        animations.map((animation) => animation.finished.catch(() => {})),
+      ).then(() => {
+        if (!cancelled) {
+          searchFocusPending.current = false;
+          searchRef.current?.focus();
+        }
+      });
+    });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(frame);
+    };
+  }, [collapsed]);
   const textRef = useRef<HTMLTextAreaElement>(null),
     dataRef = useRef(data),
     saveQueue = useRef<Promise<unknown>>(Promise.resolve()),
@@ -170,6 +206,30 @@ export default function App() {
       ?.getOutputDirectory()
       .then(setDirectory)
       .catch((e) => notify(e.message, true));
+  }, []);
+  useEffect(() => {
+    const desktop = window.daemon;
+    if (!desktop?.getDeviceStatus) return;
+    let active = true;
+    const update = (status: ConnectionStatus) => {
+      if (active) setConnection(status);
+    };
+    const unsubscribe = desktop.onDeviceStatus(update);
+    desktop
+      .getDeviceStatus()
+      .then(update)
+      .catch(() =>
+        update({
+          state: "unknown",
+          label: "Connection status unknown",
+          detail:
+            "Unable to check the device. Reopen VIDUR AI or refresh device status.",
+        }),
+      );
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, []);
   useEffect(() => {
     if (!action && !preview) return;
@@ -403,7 +463,7 @@ export default function App() {
             className="model-button"
             aria-expanded={modelMenu}
             aria-label="Select model"
-            title="Demo selection only; backend model unchanged"
+            // title="Demo selection only; backend model unchanged"
             onClick={() => {
               setModelMenu(!modelMenu);
               setThinkingMenu(false);
@@ -421,7 +481,7 @@ export default function App() {
             />
           )}
           <AnimatedMenu open={modelMenu} className="model-menu">
-            <p className="eyebrow">MODEL DEMONSTRATION</p>
+            <p className="eyebrow">MODEL SELECTION </p>
             {models.map((m) => (
               <button
                 key={m.id}
@@ -442,9 +502,9 @@ export default function App() {
                 </span>
               </button>
             ))}
-            <div className="menu-note">
+            {/* <div className="menu-note">
               Demo setting only · does not switch the actual model
-            </div>
+            </div> */}
           </AnimatedMenu>
         </div>
         <div className="model-wrap">
@@ -473,7 +533,7 @@ export default function App() {
             open={thinkingMenu}
             className="model-menu thinking-menu"
           >
-            <p className="eyebrow">THINKING · UI PREFERENCE ONLY</p>
+            <p className="eyebrow">THINKING MODES</p>
             {thinkingModes.map((mode) => (
               <button
                 key={mode}
@@ -491,12 +551,12 @@ export default function App() {
                 <span>{mode}</span>
               </button>
             ))}
-            <div className="menu-note">
+            {/* <div className="menu-note">
               Not sent to Python · does not change reasoning
-            </div>
+            </div> */}
           </AnimatedMenu>
         </div>
-        <span className="composer-hint">Demo settings · UI only</span>
+
         <button
           className="send"
           aria-label="Send prompt"
@@ -548,27 +608,71 @@ export default function App() {
   );
   return (
     <div className={`app ${collapsed ? "sidebar-collapsed" : ""}`}>
-      <aside className="sidebar">
+      <aside ref={sidebarRef} className="sidebar" aria-label="Main sidebar">
         <div className="brand">
-          <img src="./daemon-logo.svg" alt="" />
-          <span>VIDUR AI</span>
+          <button
+            className="brand-logo"
+            aria-label="Expand sidebar"
+            title="Open sidebar"
+            aria-expanded={!collapsed}
+            aria-controls="sidebar-navigation"
+            aria-hidden={!collapsed}
+            tabIndex={collapsed ? 0 : -1}
+            onClick={(event) => {
+              event.currentTarget.blur();
+              setCollapsed(false);
+              requestAnimationFrame(() =>
+                sidebarRef.current
+                  ?.querySelector<HTMLButtonElement>(".sidebar-toggle")
+                  ?.focus({ preventScroll: true }),
+              );
+            }}
+          >
+            <img src="./daemon-logo.svg" alt="" />
+          </button>
+          <span aria-hidden={collapsed}>VIDUR AI</span>
           <button
             className="icon-button sidebar-toggle"
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            onClick={() => setCollapsed(!collapsed)}
+            aria-label="Collapse sidebar"
+            title="Collapse sidebar"
+            aria-hidden={collapsed}
+            tabIndex={collapsed ? -1 : 0}
+            aria-expanded={!collapsed}
+            aria-controls="sidebar-navigation"
+            onClick={(event) => {
+              event.currentTarget.blur();
+              searchFocusPending.current = false;
+              setCollapsed(true);
+              setMenu(null);
+              requestAnimationFrame(() =>
+                sidebarRef.current
+                  ?.querySelector<HTMLButtonElement>(".brand-logo")
+                  ?.focus({ preventScroll: true }),
+              );
+            }}
           >
-            {collapsed ? (
-              <PanelLeftOpen size={19} />
-            ) : (
-              <PanelLeftClose size={19} />
-            )}
+            <PanelLeftClose size={19} />
+          </button>
+          <button
+            className="icon-button sidebar-search"
+            aria-label="Search conversations"
+            title="Search conversations"
+            aria-controls="conversation-search"
+            onClick={openConversationSearch}
+          >
+            <Search size={20} />
           </button>
         </div>
-        <button className="new-chat" onClick={newChat}>
-          <Plus size={20} />
-          <span>New chat</span>
+        <button
+          className="new-chat"
+          aria-label="New chat"
+          title="New chat"
+          onClick={newChat}
+        >
+          <SquarePen size={20} />
+          <span aria-hidden={collapsed}>New chat</span>
         </button>
-        <nav>
+        <nav id="sidebar-navigation" aria-label="Main navigation">
           {(
             [
               { id: "home", label: "Home", icon: Home },
@@ -580,6 +684,8 @@ export default function App() {
             <button
               key={item.id}
               title={item.label}
+              aria-label={item.label}
+              aria-current={view === item.id ? "page" : undefined}
               className={view === item.id ? "selected" : ""}
               onClick={() => {
                 setView(item.id);
@@ -587,16 +693,18 @@ export default function App() {
               }}
             >
               <item.icon size={20} />
-              <span>{item.label}</span>
+              <span aria-hidden={collapsed}>{item.label}</span>
             </button>
           ))}
         </nav>
-        <div className="recent">
+        <div className="recent" inert={collapsed} aria-hidden={collapsed}>
           <div className="recent-heading">
             <span>Recent conversations</span>
             <Search size={15} />
           </div>
           <input
+            ref={searchRef}
+            id="conversation-search"
             aria-label="Search conversations"
             placeholder="Search conversations"
             value={search}
@@ -670,14 +778,18 @@ export default function App() {
               )}
           </div>
         </div>
-        <button className="sidebar-status" onClick={() => setView("device")}>
-          <span className="status-dot" />
+        <button
+          className="sidebar-status"
+          aria-hidden={collapsed}
+          tabIndex={collapsed ? -1 : 0}
+          title={deviceDetail}
+          onClick={() => setView("device")}
+        >
+          <span className={`status-dot${connected ? " connected" : ""}`} />
           <Smartphone size={23} />
           <span>
             {deviceLabel}
-            <small>
-              {isMock ? "Mock mode available" : "Android provider selected"}
-            </small>
+            <small>{deviceDetail}</small>
           </span>
           <ArrowRight size={15} />
         </button>
@@ -696,8 +808,12 @@ export default function App() {
                     ? "Settings"
                     : "Home"}
           </span>
-          <button className="connection-pill" onClick={() => setView("device")}>
-            <span className="status-dot" />
+          <button
+            className="connection-pill"
+            title={deviceDetail}
+            onClick={() => setView("device")}
+          >
+            <span className={`status-dot${connected ? " connected" : ""}`} />
             <span>{deviceLabel}</span>
             <span className="mock-tag">
               {isMock ? "MOCK MODE" : "ANDROID PROVIDER"}
@@ -710,7 +826,7 @@ export default function App() {
               <img
                 className="hero-logo"
                 src="./daemon-logo.svg"
-                alt="DAEMON logo"
+                alt="VIDUR AI logo"
               />
               <span className="eyebrow">YOUR IDEAS. YOUR DEVICE.</span>
               <h1>VIDUR AI</h1>
@@ -762,11 +878,7 @@ export default function App() {
             <div className="home-footnote">
               <span className="tiny-dot" />
               Private workspace · History stays on this device
-              <span>
-                {isMock
-                  ? "Prototype with mock responses"
-                  : "Android provider · setup required"}
-              </span>
+              <span>{deviceLabel}</span>
             </div>
           </div>
         )}
@@ -916,25 +1028,37 @@ export default function App() {
             <p className="page-subtitle">
               A clear view of your local inference setup.
             </p>
+            {!isMock && window.daemon && (
+              <button
+                onClick={() =>
+                  void window
+                    .daemon!.refreshDeviceStatus()
+                    .then(setConnection)
+                    .catch(() =>
+                      notify("Could not refresh device status.", true),
+                    )
+                }
+              >
+                Refresh status
+              </button>
+            )}
             <div className="settings-panel">
               <div className="panel-heading">
                 <Smartphone size={25} />
                 <div>
                   <h3>{deviceLabel}</h3>
-                  <p>
-                    {isMock
-                      ? "Mock mode is active; the phone is not used."
-                      : "USB forwarding and phone services must be configured separately."}
-                  </p>
+                  <p>{deviceDetail}</p>
                 </div>
-                <span className="badge">{isMock ? "mock" : "unverified"}</span>
+                <span className="badge">
+                  {isMock ? "mock" : connected ? "connected" : "attention"}
+                </span>
               </div>
               <div className="info-row">
                 <span>Inference status</span>
                 <strong>
                   {isMock
-                    ? "Local model unavailable"
-                    : "Phone inference not independently verified"}
+                    ? "Simulated responses"
+                    : "Qwen readiness checked on request"}
                 </strong>
               </div>
               <div className="info-row">
@@ -952,9 +1076,8 @@ export default function App() {
                 <p>
                   {isMock
                     ? "Mock mode does not contact the device."
-                    : "Android mode sends prompts through the existing Python brain. Provider selection and ADB forwarding do not prove a phone is connected."}{" "}
-                  The Python scripts remain unchanged. Model and thinking
-                  selectors are demonstrations; they do not alter the backend.
+                    : "VIDUR AI checks USB authorization, verifies forwarding and probes the brain service. This does not test model inference."}{" "}
+                  Model and thinking preferences do not alter the backend.
                 </p>
               </div>
             </div>
@@ -1002,13 +1125,11 @@ export default function App() {
               )}
             </div>
             <div className="settings-panel">
-              <h3>About this prototype</h3>
+              <h3>About VIDUR AI</h3>
               <div className="info-row">
                 <span>Provider</span>
                 <strong>
-                  {isMock
-                    ? "Mock · no device connection"
-                    : "Android · connection unverified"}
+                  {isMock ? "Mock responses" : `Android · ${deviceLabel}`}
                 </strong>
               </div>
               <div className="info-row">
