@@ -522,7 +522,7 @@ export default function App() {
                   }}
                 />
                 <span>
-                  {m.name} — {m.configured ? "Local" : "Demo option"}
+                  {m.name}  {m.configured ? "Local" : ""}
                   <small>{m.description}</small>
                 </span>
               </button>
