@@ -1,3 +1,4 @@
+import { createServer } from "vite";
 import { _electron as electron } from "playwright";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, mkdir } from "node:fs/promises";
@@ -5,13 +6,19 @@ import os from "node:os";
 import path from "node:path";
 const temp = await mkdtemp(path.join(os.tmpdir(), "daemon-android-fixtures-"));
 let app, page;
+const devServer = await createServer({
+  server: { host: "127.0.0.1", port: 0, strictPort: false },
+});
+await devServer.listen();
+const devURL = devServer.resolvedUrls.local[0];
 try {
   app = await electron.launch({
     args: [".", `--user-data-dir=${temp}/profile`],
     env: {
       ...process.env,
       DAEMON_DEV: "1",
-      DAEMON_PROVIDER: "android",
+      DAEMON_DEV_URL: devURL,
+
       DAEMON_SAVE_DIR: `${temp}/output`,
     },
   });
@@ -99,6 +106,18 @@ try {
     assert.deepEqual(requests.at(-1).body, { prompt });
     assert.equal(requests.at(-1).redirect, "error");
   }
+  await submit(
+    { data: { action: "chat", content: "Hello, Suraj!", filename: "" } },
+    "Hello!",
+  );
+  assert.equal(
+    (await page.evaluate(() => window.daemon.load())).artifacts.length,
+    0,
+  );
+  assert.match(
+    await page.locator(".message.assistant").innerText(),
+    /Hello, Suraj!/,
+  );
   const fixtures = [
     [
       "automate_vscode",
@@ -250,5 +269,6 @@ try {
   }
   throw error;
 } finally {
+  await devServer.close();
   await app?.close();
 }

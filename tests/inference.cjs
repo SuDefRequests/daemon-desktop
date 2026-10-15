@@ -20,7 +20,27 @@ const json = (data) =>
   assert.equal(providerMode(), "mock");
   assert.equal(providerMode("android"), "android");
   assert.throws(() => providerMode("other"));
-  assert.equal(INFERENCE_TIMEOUT_MS, 260000);
+  assert.equal(INFERENCE_TIMEOUT_MS, 600000);
+  assert.deepEqual(
+    convertResponse({ action: "chat", content: "Hello, Suraj!", filename: "" }),
+    { reply: "Hello, Suraj!" },
+  );
+  assert.equal(providerMode("mock"), "mock");
+  for (const content of [
+    "Error: AI timed out.",
+    "Error: llama-server not running.",
+  ])
+    assert.throws(
+      () => convertResponse({ action: "chat", content, filename: "" }),
+      /Android brain/,
+    );
+  assert.deepEqual(
+    await generate("Hello", {
+      fetchImpl: async () =>
+        json({ action: "chat", content: "Hi!", filename: "" }),
+    }),
+    { reply: "Hi!" },
+  );
   const cases = [
     ["automate_vscode", 'print("Hello")', ".py", "code"],
     ["automate_notepad", "Meeting notes", ".txt", "document"],

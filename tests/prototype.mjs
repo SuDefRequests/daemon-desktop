@@ -1,3 +1,4 @@
+import { createServer } from "vite";
 import { chromium, _electron as electron } from "playwright";
 import assert from "node:assert/strict";
 import { mkdir, readFile, mkdtemp } from "node:fs/promises";
@@ -7,6 +8,11 @@ await mkdir("test-results", { recursive: true });
 const mode = process.env.TEST_ELECTRON === "1";
 const temp = await mkdtemp(path.join(os.tmpdir(), "daemon-test-"));
 let desktop, browser, page;
+const devServer = await createServer({
+  server: { host: "127.0.0.1", port: 0, strictPort: false },
+});
+await devServer.listen();
+const devURL = devServer.resolvedUrls.local[0];
 try {
   if (mode) {
     desktop = await electron.launch({
@@ -14,6 +20,7 @@ try {
       env: {
         ...process.env,
         DAEMON_DEV: "1",
+        DAEMON_DEV_URL: devURL,
         DAEMON_PROVIDER: "mock",
         DAEMON_SAVE_DIR: `${temp}/output`,
       },
@@ -25,7 +32,7 @@ try {
       viewport: { width: 1440, height: 940 },
       acceptDownloads: true,
     });
-    await page.goto("http://127.0.0.1:5173");
+    await page.goto(devURL);
   }
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -72,6 +79,11 @@ try {
       modelId: "daemon-compact",
       thinkingMode: "Extended",
     });
+    const chat = await createProvider("android", {
+      generate: async () => ({ reply: "Hello!" }),
+    }).generate({ prompt: "Hello", task: "chat" });
+    if (Object.hasOwn(chat, "file"))
+      throw new Error("Chat must not include a file property");
     let unavailable;
     try {
       await createProvider("android").generate({
@@ -508,6 +520,7 @@ try {
   }
   throw error;
 } finally {
+  await devServer.close();
   await desktop?.close();
   await browser?.close();
 }
