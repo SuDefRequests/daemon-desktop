@@ -34,7 +34,21 @@ export interface BrainResult {
   file?: {
     content: string;
     kind: Exclude<Task, "chat">;
-    extension: ".py" | ".txt" | ".csv" | ".md";
+    extension:
+      | ".py"
+      | ".js"
+      | ".ts"
+      | ".c"
+      | ".cpp"
+      | ".java"
+      | ".html"
+      | ".css"
+      | ".rs"
+      | ".go"
+      | ".sh"
+      | ".txt"
+      | ".csv"
+      | ".md";
   };
 }
 export interface InferenceProvider {
