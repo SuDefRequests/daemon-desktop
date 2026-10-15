@@ -3,7 +3,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { writeArtifact } = require("./artifact-files.cjs");
 const inference = require("./inference.cjs");
-let win, outputDirectory;
+let win, outputDirectory, deviceMonitor;
 let workspace = { conversations: [], artifacts: [] };
 let queue = Promise.resolve();
 function serialize(fn) {
@@ -85,7 +85,7 @@ async function managedPath(id) {
 if (process.env.DAEMON_DEV === "1") {
   if (!app.requestSingleInstanceLock()) {
     console.error(
-      "DAEMON development window is already running. Close it before launching again.",
+      "VIDUR AI development window is already running. Close it before launching again.",
     );
     app.exit(1);
   }
@@ -99,6 +99,15 @@ app.whenReady().then(async () => {
     process.env.DAEMON_PROVIDER ??
       (process.env.DAEMON_DEV === "1" ? "android" : "mock"),
   );
+  deviceMonitor = require("./device.cjs").createDeviceMonitor({
+    mode,
+    onChange: (status) => {
+      if (win && !win.isDestroyed())
+        win.webContents.send("device:status", status);
+    },
+  });
+  handle("device:status", () => deviceMonitor.getStatus());
+  handle("device:refresh", () => deviceMonitor.refresh());
   let generating = false;
   handle("inference:config", () => ({ provider: mode }));
   handle("inference:generate", async (prompt) => {
@@ -211,12 +220,14 @@ app.whenReady().then(async () => {
   win.webContents.session.setPermissionRequestHandler(
     (_wc, _permission, callback) => callback(false),
   );
+  deviceMonitor.start();
   if (process.env.DAEMON_DEV === "1")
     await win.loadURL(
       require("./dev-url.cjs").validateDevURL(process.env.DAEMON_DEV_URL),
     );
   else await win.loadFile(path.join(__dirname, "../dist/index.html"));
 });
+app.on("before-quit", () => deviceMonitor?.stop());
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
