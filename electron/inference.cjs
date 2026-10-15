@@ -57,6 +57,13 @@ function validateResponse(data) {
     throw new Error(
       "Invalid brain response: unsupported code language metadata.",
     );
+  if (
+    Object.hasOwn(data, "website") &&
+    (data.website !== true ||
+      data.action !== "automate_vscode" ||
+      data.language !== "html")
+  )
+    throw new Error("Invalid website response metadata.");
   if (!data.content.trim())
     throw new Error("The Android brain returned empty content.");
   if (data.content.length > 2_000_000 || data.content.includes("\0"))
@@ -129,6 +136,58 @@ function isCSV(content) {
 function convertResponse(response) {
   const { action, content } = validateResponse(response);
   if (action === "chat") return { reply: content };
+  if (response.website === true) {
+    const blocks = [
+      ...content.matchAll(/```(html|css)[ \t]*\r?\n([\s\S]*?)\r?\n```/g),
+    ];
+    if (
+      blocks.length !== 2 ||
+      blocks[0][1] !== "html" ||
+      blocks[1][1] !== "css" ||
+      content.replace(/```(html|css)[ \t]*\r?\n[\s\S]*?\r?\n```/g, "").trim()
+    )
+      throw new Error(
+        "Website output must contain complete HTML and CSS blocks. No website was saved.",
+      );
+    let html = blocks[0][2];
+    const css = blocks[1][2];
+    if (
+      !/<html[\s>]/i.test(html) ||
+      !/<\/html>/i.test(html) ||
+      !css.trim() ||
+      !css.includes("{")
+    )
+      throw new Error("Website output is incomplete. No website was saved.");
+    let linked = false;
+    html = html.replace(/<link\b[^>]*>/gi, (tag) => {
+      if (!/\brel\s*=\s*["']stylesheet["']/i.test(tag)) return tag;
+      if (linked)
+        throw new Error(
+          "Website output has multiple stylesheets; no website was saved.",
+        );
+      linked = true;
+      if (/\bhref\s*=\s*["'][^"']*["']/i.test(tag))
+        return tag.replace(/\bhref\s*=\s*["'][^"']*["']/i, 'href="styles.css"');
+      return tag.replace(/>$/, ' href="styles.css">');
+    });
+    if (!linked) {
+      if (!/<\/head>/i.test(html))
+        throw new Error(
+          "Website HTML has no head for its stylesheet. No website was saved.",
+        );
+      html = html.replace(
+        /<\/head>/i,
+        '<link rel="stylesheet" href="styles.css">\n</head>',
+      );
+    }
+    return {
+      reply: "Created website source from Qwen's HTML and CSS output.",
+      files: [
+        { kind: "code", extension: ".css", content: css },
+        { kind: "code", extension: ".html", content: html },
+      ],
+    };
+  }
   if (action === "automate_canva")
     return {
       reply: `The brain returned a Canva search phrase:\n\n${content}\n\nCanva automation is not supported in this foundation. No file was created and no browser was opened.`,
