@@ -11,6 +11,22 @@ async function writeArtifact(directory, artifact) {
     (await fs.readdir(root)).map((name) => name.toLowerCase()),
   );
   for (let index = 1; index <= 10000; index++) {
+    // A Java public type must keep its exact filename. Isolate duplicates instead
+    // of renaming the file or rewriting generated source (including constructors).
+    if (extension === ".java" && index > 1) {
+      const folder = await fs.mkdtemp(path.join(root, `${stem}_`));
+      const target = path.join(folder, artifact.name);
+      try {
+        await fs.writeFile(target, artifact.content, {
+          flag: "wx",
+          mode: 0o600,
+        });
+        return { ...artifact, path: target };
+      } catch (error) {
+        await fs.rmdir(folder).catch(() => {});
+        throw error;
+      }
+    }
     const name = index === 1 ? artifact.name : `${stem}_${index}${extension}`;
     if (existing.has(name.toLowerCase())) continue;
     const target = path.join(root, name);
