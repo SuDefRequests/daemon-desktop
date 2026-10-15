@@ -197,7 +197,7 @@ app.whenReady().then(async () => {
     minWidth: 850,
     minHeight: 650,
     backgroundColor: "#111315",
-    title: "DAEMON",
+    title: "VIDUR AI",
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
