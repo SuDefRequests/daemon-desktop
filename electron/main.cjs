@@ -3,6 +3,13 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { writeArtifact } = require("./artifact-files.cjs");
 const inference = require("./inference.cjs");
+const { CODE_EXTENSIONS } = require("./code-languages.cjs");
+const ARTIFACT_EXTENSIONS = new Set([
+  ".md",
+  ".csv",
+  ".txt",
+  ...CODE_EXTENSIONS,
+]);
 let win, outputDirectory, deviceMonitor;
 let workspace = { conversations: [], artifacts: [] };
 let settings = {},
@@ -50,7 +57,8 @@ function validArtifact(a) {
     typeof a.id !== "string" ||
     !/^[\w-]{1,100}$/.test(a.id) ||
     typeof a.name !== "string" ||
-    !/^[\w.-]+\.(md|csv|py|txt)$/.test(a.name) ||
+    !/^[\w.-]+$/.test(a.name) ||
+    !ARTIFACT_EXTENSIONS.has(path.extname(a.name)) ||
     a.name.length > 180 ||
     typeof a.content !== "string" ||
     a.content.length > 2_000_000
@@ -217,7 +225,12 @@ app.whenReady().then(async () => {
   });
   handle("artifact:open", async (id) => {
     const target = await managedPath(id);
-    if (path.extname(target).toLowerCase() === ".py")
+    const extension = path.extname(target).toLowerCase();
+    if (CODE_EXTENSIONS.has(extension) && extension !== ".py")
+      throw new Error(
+        "Generated source cannot be opened with the system association because it could execute code. Use Preview or Show in folder.",
+      );
+    if (extension === ".py")
       throw new Error(
         "Python source cannot be opened with the system association because it could execute code. Use Preview or Show in folder.",
       );
