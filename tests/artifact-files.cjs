@@ -42,6 +42,36 @@ const { writeArtifact } = require("../electron/artifact-files.cjs");
     await fs.readFile(path.join(directory, "MEETING_NOTES.md"), "utf8"),
     "existing uppercase file",
   );
+  for (const extension of [
+    "py",
+    "js",
+    "ts",
+    "c",
+    "cpp",
+    "java",
+    "html",
+    "css",
+    "rs",
+    "go",
+    "sh",
+  ]) {
+    const name = `language_sample.${extension}`;
+    const content = "  original source with `backticks`\r\n\tand whitespace\n";
+    const original = await writeArtifact(directory, {
+      id: extension,
+      name,
+      content,
+    });
+    const duplicate = await writeArtifact(directory, {
+      id: extension + "-duplicate",
+      name,
+      content: "new source",
+    });
+    assert.equal(original.name, name);
+    assert.equal(duplicate.name, `language_sample_2.${extension}`);
+    assert.equal(await fs.readFile(original.path, "utf8"), content);
+    assert.equal(await fs.readFile(duplicate.path, "utf8"), "new source");
+  }
   console.log(
     "Artifact files: readable disk names, concurrent collisions, case-insensitive collisions and original content preservation passed.",
   );

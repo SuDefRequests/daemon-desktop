@@ -196,7 +196,16 @@ try {
   ];
   for (const [action, content, prompt, name] of fixtures) {
     await submit(
-      { data: { action, content, filename: "../../misleading.docx" } },
+      {
+        data: {
+          action,
+          content,
+          filename:
+            action === "automate_vscode"
+              ? "../../misleading.py"
+              : "../../misleading.docx",
+        },
+      },
       prompt,
     );
     await page.getByText(name, { exact: true }).waitFor();
@@ -208,6 +217,79 @@ try {
     await page.getByRole("button", { name: "Preview", exact: true }).click();
     assert.equal(await page.locator("pre").innerText(), content);
     await page.getByRole("button", { name: "Close dialog" }).click();
+  }
+  await app.evaluate(({ shell }) => {
+    globalThis.languageReveals = [];
+    shell.showItemInFolder = (path) => {
+      globalThis.languageReveals.push(path);
+    };
+  });
+  const languageCases = [
+    ["python", ".py", 'print("Language sample")'],
+    ["javascript", ".js", "const sample = `literal ``` text`;\n"],
+    ["typescript", ".ts", "const sample: number = 1;"],
+    ["c", ".c", "int main(void) { return 0; }"],
+    ["cpp", ".cpp", "int main() { return 0; }"],
+    ["java", ".java", "class Student {}"],
+    ["html", ".html", "<h1>Language sample</h1>"],
+    ["css", ".css", "body { color: red; }"],
+    ["rust", ".rs", "fn main() {}"],
+    ["go", ".go", "package main\nfunc main() {}"],
+    ["shell", ".sh", '#!/bin/sh\necho "Language sample"'],
+  ];
+  for (const [language, extension, content] of languageCases) {
+    const ids = await page.evaluate(async () =>
+      (await window.daemon.load()).artifacts.map((a) => a.id),
+    );
+    await submit(
+      {
+        data: {
+          action: "automate_vscode",
+          language,
+          filename: "../../unsafe" + extension,
+          content,
+        },
+      },
+      `Write ${language} code for language sample`,
+    );
+    const workspace = await page.evaluate(() => window.daemon.load());
+    const artifact = workspace.artifacts.find((a) => !ids.includes(a.id));
+    assert.equal(path.extname(artifact.name), extension);
+    assert.equal(path.basename(artifact.path), artifact.name);
+    assert.ok(!artifact.name.includes("unsafe"));
+    assert.equal(await readFile(artifact.path, "utf8"), content);
+    await page.getByRole("button", { name: "Preview", exact: true }).click();
+    assert.equal(await page.locator("pre").innerText(), content);
+    await page.getByRole("button", { name: "Close dialog" }).click();
+    await assert.rejects(
+      page.evaluate((id) => window.daemon.openArtifact(id), artifact.id),
+      /could execute code/,
+    );
+    await page
+      .getByRole("button", { name: "Show in folder", exact: true })
+      .click();
+    assert.equal(
+      (await app.evaluate(() => globalThis.languageReveals)).at(-1),
+      artifact.path,
+    );
+    const savedCount = workspace.artifacts.length;
+    for (const name of [
+      "../escape" + extension,
+      "payload.exe",
+      "misleading.docx",
+    ])
+      await assert.rejects(
+        page.evaluate(
+          ({ a, name }) =>
+            window.daemon.saveArtifact({ ...a, id: crypto.randomUUID(), name }),
+          { a: artifact, name },
+        ),
+        /Invalid artifact/,
+      );
+    assert.equal(
+      (await page.evaluate(() => window.daemon.load())).artifacts.length,
+      savedCount,
+    );
   }
   const before = (await page.evaluate(() => window.daemon.load())).artifacts
     .length;

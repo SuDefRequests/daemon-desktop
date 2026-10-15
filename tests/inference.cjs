@@ -10,7 +10,10 @@ const {
 const payload = (action, content) => ({
   action,
   content,
-  filename: "../../untrusted.docx",
+  filename:
+    action === "automate_vscode"
+      ? "../../untrusted.py"
+      : "../../untrusted.docx",
 });
 const json = (data) =>
   new Response(JSON.stringify(data), {
@@ -41,6 +44,83 @@ const json = (data) =>
     }),
     { reply: "Hi!" },
   );
+  const languages = [
+    ["python", ".py", "python", "print(1)"],
+    ["javascript", ".js", "js", "const text = `literal ``` text`;\n"],
+    ["typescript", ".ts", "typescript", "const total: number = 1;"],
+    ["c", ".c", "c", "int main(void) { return 0; }"],
+    ["cpp", ".cpp", "c++", "int main() { return 0; }"],
+    ["java", ".java", "java", "class Student {}"],
+    ["html", ".html", "html", "<h1>Hello</h1>"],
+    ["css", ".css", "css", "body { color: red; }"],
+    ["rust", ".rs", "rust", "fn main() {}"],
+    ["go", ".go", "golang", "package main\nfunc main() {}"],
+    ["shell", ".sh", "bash", "#!/bin/sh\nprintf '%s\\n' hello"],
+  ];
+  for (const [language, extension, fence, content] of languages) {
+    const response = {
+      action: "automate_vscode",
+      language,
+      filename: `../../untrusted${extension}`,
+      content,
+    };
+    assert.deepEqual(convertResponse(response).file, {
+      kind: "code",
+      extension,
+      content,
+    });
+    const legacy = { ...response };
+    delete legacy.language;
+    assert.equal(convertResponse(legacy).file.extension, extension);
+    for (const newline of ["\n", "\r\n"]) {
+      const fenced = {
+        ...response,
+        content: "```" + fence + newline + content + newline + "```",
+      };
+      assert.equal(convertResponse(fenced).file.content, content);
+    }
+    const result = await generate("Write code", {
+      fetchImpl: async () => json(response),
+    });
+    assert.equal(result.file.extension, extension);
+    assert.equal(result.file.content, content);
+  }
+  for (const response of [
+    { action: "automate_vscode", filename: "x.exe", content: "text" },
+    { action: "automate_vscode", filename: "x.txt", content: "text" },
+    {
+      action: "automate_vscode",
+      filename: "x.js",
+      content: "text",
+      language: "python",
+    },
+    {
+      action: "automate_vscode",
+      filename: "x.py",
+      content: "text",
+      language: "ruby",
+    },
+    {
+      action: "automate_vscode",
+      filename: "x.py",
+      content: "text",
+      language: null,
+    },
+    {
+      action: "automate_vscode",
+      filename: "x.py",
+      content: "text",
+      language: "__proto__",
+    },
+    { action: "chat", filename: "", content: "Hello", language: "python" },
+    {
+      action: "automate_vscode",
+      filename: "x.js",
+      content: "```python\nprint(1)\n```",
+      language: "javascript",
+    },
+  ])
+    assert.throws(() => convertResponse(response));
   const cases = [
     ["automate_vscode", 'print("Hello")', ".py", "code"],
     ["automate_notepad", "Meeting notes", ".txt", "document"],

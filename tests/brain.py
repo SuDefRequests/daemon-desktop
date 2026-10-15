@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 source = ast.parse((Path(__file__).resolve().parents[1] / 'brain/daemon_brain_v4.py').read_text())
-functions = [node for node in source.body if isinstance(node, ast.FunctionDef) and node.name in ('get_intent', 'process_command', 'health')]
+functions = [node for node in source.body if isinstance(node, ast.FunctionDef) and node.name in ('get_code_language', 'get_intent', 'process_command', 'health')]
 for node in functions:
     node.decorator_list = []
 seen = []
@@ -14,7 +14,8 @@ request = SimpleNamespace(get_json=lambda **kwargs: {'prompt': current})
 namespace = dict(re=re, time=time, request=request, jsonify=lambda value: value,
                  TOKEN_CEILING=dict(word=500, excel=300, ppt=700, vscode=600, notepad=300, canva=15),
                  generate_text=lambda prompt, ceiling: seen.append(prompt) or 'Model reply')
-exec(compile(ast.fix_missing_locations(ast.Module(body=functions, type_ignores=[])), '<brain routing>', 'exec'), namespace)
+constants = [node for node in source.body if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id in ('CODE_LANGUAGES', 'UNSUPPORTED_CODE_LANGUAGES', 'CODE_LANGUAGE_PATTERN') for target in node.targets)]
+exec(compile(ast.fix_missing_locations(ast.Module(body=constants + functions, type_ignores=[])), '<brain routing>', 'exec'), namespace)
 chat = ['Hello Qwen!', 'Why is the Sky Blue?', 'Please note that I am busy', 'Explain Python code', 'Can you make Python easier to understand?', 'Provide information about Python',
         'What is a spreadsheet?', 'How do I create a Word document?', 'Explain how to write code',
         'Write a short reply about Python', 'Write an explanation of Python code', 'I used to write Python code', 'I do not want to create a document', 'Do not create a document', 'Can you explain this presentation?']
@@ -33,3 +34,52 @@ for current in chat + list(files):
 print('Brain: chat/default routing, explicit artifact intents, response schema and original prompt case passed.')
 
 assert namespace["health"]() == {"service": "vidur-brain", "status": "ok"}
+
+cases = [
+    ("python", ".py", "Write a Python program to sort an array"),
+    ("javascript", ".js", "Write a JavaScript function to reverse a string"),
+    ("typescript", ".ts", "Write a TypeScript function for a total"),
+    ("c", ".c", "Write a C program for a sum"),
+    ("cpp", ".cpp", "Create a C++ program for binary search"),
+    ("java", ".java", "Create a Java class for a student record"),
+    ("html", ".html", "Create a basic HTML page"),
+    ("html", ".html", "Create an HTML table"),
+    ("html", ".html", "Write an HTML document"),
+    ("css", ".css", "Create a CSS stylesheet for a card"),
+    ("rust", ".rs", "Write a Rust program for a total"),
+    ("go", ".go", "Write a Go program for a sum"),
+    ("shell", ".sh", "Write a Bash script to list files"),
+    ("javascript", ".js", "In JavaScript, write code to reverse a string"),
+    ("javascript", ".js", 'Write a script in JavaScript to print "Python code"'),
+    ("typescript", ".ts", "Write code to sort an array using TypeScript"),
+    ("cpp", ".cpp", "Write code in C++ rather than Python"),
+    ("html", ".html", "Create a page in HTML"),
+    ("css", ".css", "Create a stylesheet using CSS"),
+    ("go", ".go", "Create a Python parser in Go"),
+    ("python", ".py", "Write a program to go through a list"),
+    ("python", ".py", "Write some simple code"),
+    ("javascript", ".js", "Write code in 'JavaScript'"),
+    ("typescript", ".ts", "Create a file called example.ts"),
+]
+model_output = '  // Keep original backticks and whitespace\nconst value = `literal ``` text`;\n'
+namespace['generate_text'] = lambda prompt, ceiling: seen.append(prompt) or model_output
+for language, extension, current in cases:
+    assert namespace['get_intent'](current) == 'vscode', current
+    assert namespace['get_code_language'](current) == language, current
+    result = namespace['process_command']()
+    assert result['action'] == 'automate_vscode', (current, result)
+    assert result['language'] == language and result['filename'].endswith(extension), result
+    assert result['content'] == model_output
+    assert seen[-1].startswith('Write simple ' + namespace['CODE_LANGUAGES'][language][0] + ' code for: ')
+    assert current in seen[-1]
+for current in ['What is Python?', 'Explain JavaScript functions', 'What is C++?',
+                'Write a report about Java code', 'Write notes about Rust programs',
+                'Write an explanation of HTML pages']:
+    assert namespace['get_intent'](current) != 'vscode', current
+for current in ['Write code in JavaScript or TypeScript', 'Write Java or Python code',
+                'Write C# code', 'Write Ruby code', 'Write code using PowerShell', 'Write code in Elixir', 'Write Elixir code']:
+    calls = len(seen)
+    result = namespace['process_command']()
+    assert result['action'] == 'chat' and result['filename'] == '', (current, result)
+    assert 'choose one supported' in result['content'] and len(seen) == calls
+print('Brain: all eleven languages, request-context detection, metadata/extensions, original content and ambiguity/unsupported-language clarification passed.')
