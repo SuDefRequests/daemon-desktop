@@ -1,4 +1,5 @@
 import { createServer } from "vite";
+import { verifySidebar } from "./sidebar.mjs";
 import { chromium, _electron as electron } from "playwright";
 import assert from "node:assert/strict";
 import { mkdir, readFile, mkdtemp } from "node:fs/promises";
@@ -39,8 +40,7 @@ try {
   await page.getByRole("heading", { name: "VIDUR AI", exact: true }).waitFor();
   assert.equal(await page.locator("header .model-button").count(), 0);
   assert.equal(await page.locator(".composer .model-button").count(), 1);
-  await page.getByRole("button", { name: "Collapse sidebar" }).click();
-  await page.getByRole("button", { name: "Expand sidebar" }).click();
+  await verifySidebar(page, !mode);
   await page.locator(".model-button").click();
   assert.equal(await page.locator(".model-menu > button").count(), 2);
   await page
@@ -173,6 +173,21 @@ try {
   await page
     .getByText("This is a mock response to", { exact: false })
     .waitFor();
+  await page
+    .getByRole("button", { name: "Collapse sidebar", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Search conversations", exact: true })
+    .click();
+  await page.waitForFunction(
+    () => document.activeElement?.id === "conversation-search",
+  );
+  await page
+    .getByRole("textbox", { name: "Search conversations" })
+    .fill("Calculation example");
+  assert.equal(await page.locator(".chat-select").count(), 1);
+  await page.getByRole("textbox", { name: "Search conversations" }).fill("");
+  assert.equal(await page.locator(".chat-select").count(), 2);
   await page
     .getByRole("button", { name: "Calculation example", exact: true })
     .click();
