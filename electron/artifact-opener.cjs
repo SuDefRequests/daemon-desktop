@@ -19,11 +19,29 @@ const execute = (file, args, options) =>
     });
   });
 
+// A GUI process can stay alive indefinitely. Confirm process creation, not exit.
+const startWindows = (file, args, options) =>
+  new Promise((resolve, reject) => {
+    const child = childProcess.spawn(file, args, {
+      env: options.env,
+      windowsHide: true,
+      shell: false,
+      detached: true,
+      stdio: "ignore",
+    });
+    child.once("error", reject);
+    child.once("spawn", () => {
+      child.unref();
+      resolve();
+    });
+  });
+
 function createArtifactOpener({
   shell,
   platform = process.platform,
   env = process.env,
   run = execute,
+  start = startWindows,
   realpath = fs.realpath,
   stat = fs.stat,
   timeoutMs = 8000,
@@ -37,31 +55,26 @@ function createArtifactOpener({
   };
   const exists = async (file) =>
     (await stat(file).catch(() => null))?.isFile() === true;
-  async function findCode(candidates, discovered) {
+  async function findCode(candidates) {
+    let fallback;
     for (let candidate of candidates) {
       candidate = candidate.trim().replace(/^"(.*)"$/, "$1");
       if (!paths.isAbsolute(candidate)) continue;
-      if (
-        ["code.cmd", "code"].includes(paths.basename(candidate).toLowerCase())
-      )
+      const name = paths.basename(candidate).toLowerCase();
+      let launcher;
+      if (["code.cmd", "code"].includes(name)) {
+        launcher = paths.join(paths.dirname(candidate), "code.cmd");
         candidate = paths.resolve(paths.dirname(candidate), "..", "Code.exe");
-      if (paths.basename(candidate).toLowerCase() !== "code.exe") continue;
-      const cli = paths.join(
-        paths.dirname(candidate),
-        "resources",
-        "app",
-        "out",
-        "cli.js",
-      );
-      if (await exists(candidate)) {
-        discovered.add(candidate);
-        if (await exists(cli)) return { executable: candidate, cli };
-      }
+      } else if (name === "code.exe") {
+        launcher = paths.join(paths.dirname(candidate), "bin", "code.cmd");
+      } else continue;
+      launcher = (await exists(launcher)) ? launcher : undefined;
+      if (await exists(candidate)) return { executable: candidate, launcher };
+      if (launcher) fallback ||= { launcher };
     }
-    return null;
+    return fallback;
   }
   async function windowsCode(signal) {
-    const discovered = new Set();
     const candidates = [];
     if (env.DAEMON_VSCODE_PATH) candidates.push(env.DAEMON_VSCODE_PATH);
     else {
@@ -88,7 +101,7 @@ function createArtifactOpener({
       ]) {
         if (value(key)) candidates.push(paths.join(value(key), suffix));
       }
-      const installed = await findCode(candidates, discovered);
+      const installed = await findCode(candidates);
       if (installed) return installed;
       for (const name of ["code", "code.cmd", "Code.exe"]) {
         try {
@@ -97,7 +110,7 @@ function createArtifactOpener({
             signal,
           });
           candidates.push(...stdout.trim().split(/\r?\n/).filter(Boolean));
-          const found = await findCode(candidates, discovered);
+          const found = await findCode(candidates);
           if (found) return found;
         } catch (error) {
           if (error.killed || signal.aborted) throw error;
@@ -124,12 +137,8 @@ function createArtifactOpener({
         }
       }
     }
-    const found = await findCode(candidates, discovered);
+    const found = await findCode(candidates);
     if (found) return found;
-    if (discovered.size)
-      throw new Error(
-        `VS Code was discovered at ${[...discovered].join(", ")}, but its resources/app/out/cli.js launcher is missing or inaccessible. Repair the VS Code installation.`,
-      );
     throw new Error(
       "VS Code was not found. Install it with its PATH option, or set DAEMON_VSCODE_PATH to its Code.exe path and restart VIDUR AI.",
     );
@@ -141,20 +150,63 @@ function createArtifactOpener({
     delete editorEnv.VSCODE_DEV;
     delete editorEnv.ELECTRON_RUN_AS_NODE;
     if (platform === "win32") {
-      const { executable, cli } = await windowsCode(signal);
+      const { executable, launcher } = await windowsCode(signal);
       signal.throwIfAborted();
-      // This is VS Code's own CLI entry point, as used by code.cmd. Generated
-      // source is only a file argument after '--'; never a runtime entry point.
-      try {
-        await run(executable, [cli, "--reuse-window", "--", target], {
-          ...options,
-          signal,
-          env: { ...editorEnv, ELECTRON_RUN_AS_NODE: "1" },
-        });
-      } catch (error) {
-        if (error.killed || signal.aborted) throw error;
+      let directError;
+      if (executable) {
+        try {
+          await start(executable, ["--reuse-window", "--", target], {
+            ...options,
+            env: editorEnv,
+          });
+          return {
+            status: "requested",
+            message: "Open request sent to VS Code.",
+          };
+        } catch (error) {
+          directError = error;
+          // Retry only a failed spawn, never an already-started GUI process.
+          if (
+            !launcher ||
+            !["ENOENT", "EACCES", "ENOEXEC"].includes(error.code)
+          )
+            throw new Error(
+              `VS Code at ${executable} could not start: ${error.message}`,
+            );
+        }
+      }
+      signal.throwIfAborted();
+      // Batch files require cmd.exe. Only fixed syntax is used, and values are
+      // passed via environment variables. Reject cmd metacharacters rather than
+      // attempting to escape arbitrary paths through multiple batch expansions.
+      if (/["%!^&|<>()\r\n]/.test(launcher + target))
         throw new Error(
-          `VS Code was discovered at ${executable}, but launching failed: ${error.message}`,
+          `VS Code launcher fallback cannot safely handle this path.${directError ? " Direct launch failed: " + directError.message : ""}`,
+        );
+      try {
+        await run(
+          env.ComSpec || env.COMSPEC || "cmd.exe",
+          [
+            "/d",
+            "/v:off",
+            "/s",
+            "/c",
+            '\"\"%DAEMON_EDITOR_LAUNCHER%\" --reuse-window -- \"%DAEMON_EDITOR_FILE%\"\"',
+          ],
+          {
+            ...options,
+            signal,
+            windowsVerbatimArguments: true,
+            env: {
+              ...editorEnv,
+              DAEMON_EDITOR_LAUNCHER: launcher,
+              DAEMON_EDITOR_FILE: target,
+            },
+          },
+        );
+      } catch (error) {
+        throw new Error(
+          `VS Code launcher ${launcher} could not start: ${error.message}${directError ? "; direct launch failed: " + directError.message : ""}`,
         );
       }
     } else if (platform === "linux" || platform === "darwin") {
