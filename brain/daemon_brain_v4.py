@@ -74,29 +74,62 @@ def generate_text(prompt, max_tokens):
 
 
 def get_intent(text):
+    # Require a creation request and a named output, not incidental substrings.
     text = text.lower()
-    if any(w in text for w in ["code", "python", "script", "vs"]): return "vscode"
-    if any(w in text for w in ["excel", "sheet", "table", "csv"]): return "excel"
-    if any(w in text for w in ["canva", "poster", "design"]): return "canva"
-    if any(w in text for w in ["ppt", "powerpoint", "slide", "presentation"]): return "ppt"
-    if any(w in text for w in ["notepad", "note", "txt"]): return "notepad"
-    return "word"
+    creation = re.search(r"\b(?:create|generate|write|draft|make|build|save|export|prepare|produce|design|give|provide)\b", text)
+    if not creation or re.search(r"\b(?:don't|do not|never)\s+(?:create|generate|write|make|save|export)\b", text):
+        return "chat"
+    # Only inspect the requested output after the creation verb. Questions about
+    # code/notes before that verb must not choose an artifact type.
+    prefix = text[:creation.start()]
+    if not re.fullmatch(
+        r"\s*(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?|"
+        r"i\s+(?:want|need|would like)\s+(?:you\s+)?to\s+)?", prefix
+    ):
+        return "chat"
+    target = text[creation.end():].strip()
+    if re.match(r"(?:(?:me|us)\s+)?(?:how|why|whether|if)\b", target):
+        return "chat"
+    if re.match(r"(?:(?:me|us)\s+)?(?:(?:a|an|the|short|simple|detailed|brief)\s+)*(?:explanation|answer|response|reply|greeting|message)\b", target):
+        return "chat"
+    target = re.split(r"\b(?:about|for|regarding|on the topic of)\b", target, maxsplit=1)[0]
+    outputs = [
+        ("vscode", r"python\s+(?:code|script|file|program)|code|script|program|\.py\b"),
+        ("excel", r"excel(?:\s+(?:file|workbook))?|spreadsheet|csv(?:\s+file)?|table|\.csv\b"),
+        ("canva", r"canva(?:\s+design)?|poster|design"),
+        ("ppt", r"ppt|powerpoint|slides?|presentation"),
+        ("notepad", r"notepad(?:\s+file)?|text\s+file|txt\s+file|notes?(?:\s+file)?|\.txt\b"),
+        ("word", r"word\s+(?:document|file)|document|report|essay|\.docx\b"),
+    ]
+    matches = []
+    for intent, pattern in outputs:
+        match = re.search(r"(?<![\w])(?:" + pattern + r")(?![\w])", target)
+        if match:
+            matches.append((match.start(), intent))
+    return min(matches)[1] if matches else "chat"
 
 
 @app.route('/process', methods=['POST'])
 def process_command():
     req_start = time.perf_counter()
-    user_prompt = request.json.get("prompt", "").lower()
+    data = request.get_json(silent=True)
+    user_prompt = data.get("prompt") if isinstance(data, dict) else None
+    if not isinstance(user_prompt, str) or not user_prompt.strip() or len(user_prompt) > 12000 or "\0" in user_prompt:
+        return jsonify({"error": "Prompt must contain 1–12000 characters without null bytes."}), 400
     print(f"[DAEMON] Incoming request: {user_prompt!r}", flush=True)
 
     intent = get_intent(user_prompt)
-    ceiling = TOKEN_CEILING[intent]
+    ceiling = TOKEN_CEILING["word" if intent == "chat" else intent]
 
     words = re.sub(r'[^a-zA-Z0-9 ]', '', user_prompt).split()
     raw_name = "_".join(words[-3:]) if len(words) >= 3 else "output"
     context_name = f"DAEMON_{raw_name}"
 
-    if intent == "vscode":
+    if intent == "chat":
+        output = generate_text(user_prompt, ceiling)
+        resp = jsonify({"action": "chat", "content": output, "filename": ""})
+
+    elif intent == "vscode":
         output = generate_text(
             f"Write simple python code for: {user_prompt}. "
             f"ONLY output raw code, no comments, no explanation, no markdown.", ceiling)
