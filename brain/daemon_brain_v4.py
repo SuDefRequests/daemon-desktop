@@ -174,6 +174,8 @@ def get_intent(text):
             r"\b(?:save|export)\s+(?:(?:it|this)\s+)?as\s+(?:a\s+)?(?:docx|document)\b", target)
         return "word" if document_requested else "chat"
     target = re.split(r"\b(?:about|for|regarding|on the topic of)\b", target, maxsplit=1)[0]
+    if re.search(r"\b(?:website|landing\s+page)\b|\.html\b", target):
+        return "vscode"
     outputs = [
         ("vscode", r"code|script|program|function|parser|module|(?:html|css)\s+(?:document|table|form|button|layout|styles?)|(?:class|page|stylesheet)\s+(?:in|using)\s+(?:" + CODE_LANGUAGE_PATTERN + r")|(?:" + CODE_LANGUAGE_PATTERN + r")\s+(?:class|page|stylesheet|file|app|application)|[\w-]*\.(?:py|js|ts|c|cpp|java|html|css|rs|go|sh)\b"),
         ("excel", r"excel(?:\s+(?:file|workbook))?|spreadsheet|csv(?:\s+file)?|table|\.csv\b"),
@@ -218,7 +220,14 @@ def process_command():
         resp = jsonify({"action": "chat", "content": output, "filename": ""})
 
     elif intent == "vscode":
-        language = get_code_language(user_prompt)
+        if re.search(r"\b(?:html|website|landing\s+page)\b|\.html\b", user_prompt, re.I) and re.search(r"\bcss\b|\.css\b", user_prompt, re.I):
+            output = generate_text(
+                f"Create a small HTML and CSS website for: {user_prompt}. "
+                "Output exactly two complete fenced code blocks: ```html then ```css. "
+                "HTML must link to styles.css. No explanations. Keep both files short and complete.", ceiling)
+            return jsonify({"action": "automate_vscode", "content": output,
+                            "filename": "index.html", "language": "html", "website": True})
+        language = "html" if re.search(r"\b(?:website|landing\s+page)\b", user_prompt, re.I) and not re.search(r"\b(?:python|javascript|typescript|react|java)\b", user_prompt, re.I) else get_code_language(user_prompt)
         if language is None:
             return jsonify({"action": "chat", "content": "Please choose one supported programming language: Python, JavaScript, TypeScript, C, C++, Java, HTML, CSS, Rust, Go, or Shell.", "filename": ""})
         label, extension, _ = CODE_LANGUAGES[language]
