@@ -125,3 +125,17 @@ namespace['generate_text'] = lambda prompt, ceiling, status: status.update(state
 result = namespace['process_command']()
 assert result['generation_status'] == 'partial' and result['content'] == 'Usable partial script'
 print('Brain: presentation completion metadata, legacy unknown status and unchanged text callers passed.')
+
+# Website requests keep the existing action but opt into a two-file response.
+namespace['generate_text'] = lambda prompt, ceiling: seen.append(prompt) or '```html\n<html><head></head><body>Bakery</body></html>\n```\n```css\nbody { color: brown; }\n```'
+for current in ['make a simple html css website for a bakery shop', 'Build a landing page using HTML and CSS.', 'Create index.html and styles.css for a bakery website.']:
+    assert namespace['get_intent'](current) == 'vscode', current
+    result = namespace['process_command']()
+    assert result['action'] == 'automate_vscode' and result['website'] is True
+    assert result['language'] == 'html' and current in seen[-1]
+current = 'Create an HTML website for my portfolio.'
+result = namespace['process_command']()
+assert result['action'] == 'automate_vscode' and result['language'] == 'html' and 'website' not in result
+for current in ['How do HTML and CSS work together?', 'Explain how to build a landing page using HTML and CSS']:
+    assert namespace['get_intent'](current) == 'chat'
+print('Brain: explicit HTML/website routing, two-file metadata, original prompts and conversational questions passed.')

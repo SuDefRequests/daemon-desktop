@@ -369,3 +369,40 @@ const json = (data) =>
   console.error(error);
   process.exitCode = 1;
 });
+
+const websiteContent =
+  '```html\n<html><head><link rel="stylesheet" href="old.css"></head><body>Bakery model text</body></html>\n```\n```css\nbody { color: brown; }\n```';
+const website = {
+  action: "automate_vscode",
+  language: "html",
+  filename: "index.html",
+  website: true,
+  content: websiteContent,
+};
+const convertedWebsite = convertResponse(website);
+assert.equal(convertedWebsite.file, undefined);
+assert.deepEqual(
+  convertedWebsite.files.map((f) => f.extension),
+  [".css", ".html"],
+);
+assert.equal(convertedWebsite.files[0].content, "body { color: brown; }");
+assert.match(convertedWebsite.files[1].content, /href="styles.css"/);
+assert.match(convertedWebsite.files[1].content, /Bakery model text/);
+for (const content of [
+  "",
+  "```html\n<html></html>\n```",
+  websiteContent.slice(0, -3),
+])
+  assert.throws(() => convertResponse({ ...website, content }));
+assert.throws(() => convertResponse({ ...website, language: "python" }));
+assert.equal(
+  convertResponse({
+    action: "chat",
+    filename: "",
+    content: "HTML and CSS work together.",
+  }).files,
+  undefined,
+);
+console.log(
+  "Website conversion: linked source files, preserved model content and rejected incomplete output passed.",
+);

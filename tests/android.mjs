@@ -525,6 +525,40 @@ try {
       );
     }
   }
+  // Save twice to exercise stylesheet collisions and real HTML references.
+  for (let iteration = 1; iteration <= 2; iteration++) {
+    const suffix = iteration === 1 ? "" : "_2";
+    const beforeOpens = await app.evaluate(
+      () => globalThis.daemonAppActions.length,
+    );
+    await submit(
+      {
+        data: {
+          action: "automate_vscode",
+          language: "html",
+          website: true,
+          filename: "index.html",
+          content:
+            '```html\n<html><head><link rel="stylesheet" href="styles.css"></head><body>Model bakery content</body></html>\n```\n```css\nbody { color: brown; }\n```',
+        },
+      },
+      "make a simple html css website for a bakery shop",
+    );
+    await page.getByText(`index${suffix}.html`, { exact: true }).waitFor();
+    await page.getByText(`styles${suffix}.css`, { exact: true }).waitFor();
+    assert.equal(await page.locator(".artifact-inline").count(), 2);
+    const ws = await page.evaluate(() => window.daemon.load());
+    const html = ws.artifacts.find((a) => a.name === `index${suffix}.html`);
+    const css = ws.artifacts.find((a) => a.name === `styles${suffix}.css`);
+    assert.match(
+      await readFile(html.path, "utf8"),
+      new RegExp(`href="styles${suffix}\\.css"`),
+    );
+    assert.equal(await readFile(css.path, "utf8"), "body { color: brown; }");
+    const opens = await app.evaluate(() => globalThis.daemonAppActions);
+    assert.equal(opens.length, beforeOpens + 2);
+    assert.ok(JSON.stringify(opens.at(-1)).includes(html.path));
+  }
   await app.evaluate(() => {
     globalThis.daemonCodeError = "VS Code launcher unavailable (fixture)";
   });
