@@ -8,6 +8,8 @@ const ARTIFACT_EXTENSIONS = new Set([
   ".md",
   ".csv",
   ".txt",
+  ".pptx",
+  ".docx",
   ...CODE_EXTENSIONS,
 ]);
 let win, outputDirectory, deviceMonitor;
@@ -64,6 +66,13 @@ function validArtifact(a) {
     a.content.length > 2_000_000
   )
     throw new Error("Invalid artifact");
+  if (path.extname(a.name) === ".pptx") {
+    if (a.kind !== "presentation")
+      throw new Error("Invalid PowerPoint artifact kind");
+    require("./presentation.cjs").presentationStatus(a.presentationStatus);
+  }
+  if (path.extname(a.name) === ".docx" && a.kind !== "document")
+    throw new Error("Invalid artifact: Word files require document content");
 }
 function validWorkspace(data) {
   if (
@@ -126,6 +135,9 @@ app.whenReady().then(async () => {
       if (win && !win.isDestroyed())
         win.webContents.send("device:status", status);
     },
+  });
+  const artifactOpener = require("./artifact-opener.cjs").createArtifactOpener({
+    shell,
   });
   handle("device:status", () => deviceMonitor.getStatus());
   handle("device:refresh", () => deviceMonitor.refresh());
@@ -216,30 +228,61 @@ app.whenReady().then(async () => {
     if (loadError) throw new Error(loadError);
     validArtifact(a);
     return serialize(async () => {
+      const existing = workspace.artifacts.find((saved) => saved.id === a.id);
+      if (existing) {
+        if (
+          existing.content !== a.content ||
+          existing.kind !== a.kind ||
+          existing.conversationId !== a.conversationId
+        )
+          throw new Error(
+            "Artifact ID is already registered with different content.",
+          );
+        return {
+          ...existing,
+          opening: {
+            status: "already-saved",
+            message:
+              "File was already saved; no duplicate open request was sent.",
+          },
+        };
+      }
       const saved = await writeArtifact(outputDirectory, a);
       const next = { ...workspace, artifacts: [...workspace.artifacts, saved] };
       await atomicWrite(dataFile(), next);
       workspace = next;
-      return saved;
+      let opening;
+      try {
+        opening = await artifactOpener.open(await managedPath(saved.id));
+      } catch (error) {
+        opening = { status: "failed", message: error.message };
+      }
+      return { ...saved, opening };
     });
   });
   handle("artifact:open", async (id) => {
-    const target = await managedPath(id);
-    const extension = path.extname(target).toLowerCase();
-    if (CODE_EXTENSIONS.has(extension) && extension !== ".py")
-      throw new Error(
-        "Generated source cannot be opened with the system association because it could execute code. Use Preview or Show in folder.",
-      );
-    if (extension === ".py")
-      throw new Error(
-        "Python source cannot be opened with the system association because it could execute code. Use Preview or Show in folder.",
-      );
-    const error = await shell.openPath(target);
-    if (error) throw new Error(error);
+    return artifactOpener.open(await managedPath(id));
   });
   handle("artifact:reveal", async (id) =>
     shell.showItemInFolder(await managedPath(id)),
   );
+  // Only registered presentations can be downloaded through this binary API.
+  handle("artifact:read-presentation", async (id) => {
+    const target = await managedPath(id);
+    if (path.extname(target) !== ".pptx")
+      throw new Error("Not a PowerPoint artifact");
+    if ((await fs.stat(target)).size > 10_000_000)
+      throw new Error("Presentation is too large to download");
+    return Uint8Array.from(await fs.readFile(target)).buffer;
+  });
+  handle("artifact:read-document", async (id) => {
+    const target = await managedPath(id);
+    if (path.extname(target) !== ".docx")
+      throw new Error("Not a Word artifact");
+    if ((await fs.stat(target)).size > 10_000_000)
+      throw new Error("Document is too large to download");
+    return Uint8Array.from(await fs.readFile(target)).buffer;
+  });
   handle("output:get", () => outputDirectory);
   handle("output:choose", async () => {
     const result = await dialog.showOpenDialog(win, {
