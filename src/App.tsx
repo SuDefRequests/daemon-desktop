@@ -386,7 +386,7 @@ export default function App() {
         ref={textRef}
         maxLength={12000}
         aria-label="Your prompt"
-        placeholder="Ask DAEMON to create something…"
+        placeholder="Ask VIDUR AI to create something…"
         value={prompt}
         disabled={busy || !ready}
         onChange={(e) => setPrompt(e.target.value)}
@@ -551,7 +551,7 @@ export default function App() {
       <aside className="sidebar">
         <div className="brand">
           <img src="./daemon-logo.svg" alt="" />
-          <span>DAEMON</span>
+          <span>VIDUR AI</span>
           <button
             className="icon-button sidebar-toggle"
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -713,10 +713,10 @@ export default function App() {
                 alt="DAEMON logo"
               />
               <span className="eyebrow">YOUR IDEAS. YOUR DEVICE.</span>
-              <h1>DAEMON</h1>
+              <h1>VIDUR AI</h1>
               <h2>Your local AI workstation</h2>
               <p>
-                Create, automate and get things done — powered by your device.
+                Create, automate and get things done, powered by your device.
               </p>
             </div>
             {composer}
