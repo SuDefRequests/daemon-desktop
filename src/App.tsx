@@ -94,11 +94,28 @@ const quick = [
   { title: "Plan", icon: CalendarDays, prompt: "Help me plan " },
   { title: "Brainstorm", icon: Brain, prompt: "Brainstorm ideas for " },
 ];
+const welcomeGreetings = [
+  ["What's on your mind today", "?"],
+  ["Ready when you are", "."],
+  ["Let's make something worthwhile", "."],
+  ["What are we figuring out today", "?"],
+  ["A new idea starts here", "."],
+  ["Let's get to work", "."],
+  ["What would you like to explore today", "?"],
+  ["Got something in mind", "?"],
+] as const;
+function welcomeText([text, ending]: readonly [string, string], name: string) {
+  const greeting = name ? `${text}, ${name}` : text;
+  return /[.!?]$/.test(greeting) ? greeting : greeting + ending;
+}
 const uid = () => crypto.randomUUID();
 export default function App() {
   const [provider, setProvider] = useState<InferenceProvider>(() =>
     createProvider("mock"),
   );
+  const [welcomeGreeting, setWelcomeGreeting] = useState<
+    (typeof welcomeGreetings)[number]
+  >(welcomeGreetings[0]);
   const [preferredName, setPreferredName] = useState("");
   const [nameDraft, setNameDraft] = useState("");
   const [preferencesLoading, setPreferencesLoading] = useState(true);
@@ -315,6 +332,9 @@ export default function App() {
     if (view === "chat" && !active) textRef.current?.focus();
   }, [view, active]);
   function newChat() {
+    setWelcomeGreeting(
+      welcomeGreetings[Math.floor(Math.random() * welcomeGreetings.length)],
+    );
     setActive(null);
     setView("chat");
     setPrompt("");
@@ -913,11 +933,7 @@ export default function App() {
           >
             {!conversation ? (
               <div className="conversation-welcome">
-                <h1>
-                  {preferredName
-                    ? `Where shall we begin, ${preferredName}?`
-                    : "Where shall we begin?"}
-                </h1>
+                <h1>{welcomeText(welcomeGreeting, preferredName)}</h1>
                 <p>I'm here to help you think, create, and get things done.</p>
               </div>
             ) : (

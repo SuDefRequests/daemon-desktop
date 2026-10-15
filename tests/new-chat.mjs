@@ -1,5 +1,37 @@
 import assert from "node:assert/strict";
 
+const greetings = [
+  ["What's on your mind today", "?"],
+  ["Ready when you are", "."],
+  ["Let's make something worthwhile", "."],
+  ["What are we figuring out today", "?"],
+  ["A new idea starts here", "."],
+  ["Let's get to work", "."],
+  ["What would you like to explore today", "?"],
+  ["Got something in mind", "?"],
+];
+export async function expectWelcome(page, name = "") {
+  const heading = page.locator(".conversation-welcome h1");
+  const expected = greetings.map(
+    ([greeting, ending]) => `${greeting}${name ? `, ${name}` : ""}${ending}`,
+  );
+  await page.waitForFunction(
+    (expected) =>
+      expected.includes(
+        document.querySelector(".conversation-welcome h1")?.textContent,
+      ),
+    expected,
+  );
+  const text = await heading.innerText();
+  assert.ok(
+    greetings.some(
+      ([greeting, ending]) =>
+        text === `${greeting}${name ? `, ${name}` : ""}${ending}`,
+    ),
+    text,
+  );
+  return text;
+}
 export async function verifyNewChatPreferences(page) {
   const workspace = () =>
     page.evaluate(async () =>
@@ -36,9 +68,7 @@ export async function verifyNewChatPreferences(page) {
   for (const screen of ["Home", "My files", "Device & model", "Settings"]) {
     await page.getByRole("button", { name: screen, exact: true }).click();
     await fresh();
-    await page
-      .getByRole("heading", { name: "Where shall we begin?", exact: true })
-      .waitFor();
+    await expectWelcome(page);
     assert.equal(
       await page
         .locator(
@@ -55,32 +85,50 @@ export async function verifyNewChatPreferences(page) {
       () => document.activeElement === document.querySelector("textarea"),
     );
   }
+  // Deterministic random values exercise every option without flaky probability checks.
+  for (let index = 0; index < greetings.length; index++) {
+    await page.evaluate((index) => {
+      window.originalGreetingRandom ??= Math.random;
+      Math.random = () => (index + 0.5) / 8;
+    }, index);
+    try {
+      await fresh();
+      assert.equal(
+        await expectWelcome(page),
+        greetings[index][0] + greetings[index][1],
+      );
+    } finally {
+      await page.evaluate(() => {
+        Math.random = window.originalGreetingRandom;
+      });
+    }
+  }
+  const stable = await expectWelcome(page);
+  await page
+    .getByRole("textbox", { name: "Your prompt" })
+    .fill("Typing should not change the greeting");
+  await page.locator(".model-button").click();
+  assert.equal(await expectWelcome(page), stable);
+  await page.keyboard.press("Escape");
+  await page.getByRole("textbox", { name: "Your prompt" }).fill("");
   await save("  Suraj  ");
   assert.equal(await input.inputValue(), "Suraj");
   await fresh();
-  await page
-    .getByRole("heading", { name: "Where shall we begin, Suraj?", exact: true })
-    .waitFor();
+  await expectWelcome(page, "Suraj");
   await page.screenshot({ path: "test-results/new-chat-personalized.png" });
   await page.reload();
   await page.getByRole("heading", { name: "VIDUR AI", exact: true }).waitFor();
   await fresh();
-  await page
-    .getByRole("heading", { name: "Where shall we begin, Suraj?", exact: true })
-    .waitFor();
+  await expectWelcome(page, "Suraj");
   await settings();
   assert.equal(await input.inputValue(), "Suraj");
   await save("   ");
   assert.equal(await input.inputValue(), "");
   await fresh();
-  await page
-    .getByRole("heading", { name: "Where shall we begin?", exact: true })
-    .waitFor();
+  await expectWelcome(page);
   await save("Mira");
   await fresh();
-  await page
-    .getByRole("heading", { name: "Where shall we begin, Mira?", exact: true })
-    .waitFor();
+  await expectWelcome(page, "Mira");
   assert.deepEqual(
     await workspace(),
     before,

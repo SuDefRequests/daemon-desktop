@@ -1,4 +1,5 @@
 import { createServer } from "vite";
+import { expectWelcome } from "./new-chat.mjs";
 import { _electron as electron } from "playwright";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, mkdir } from "node:fs/promises";
@@ -98,9 +99,7 @@ try {
   ])
     await assertStatus(state, label, "Fixture device status");
   await page.locator(".model-button").click();
-  await page
-    .getByRole("button", { name: /VIDUR AI Compact — Demo option/ })
-    .click();
+  await page.getByRole("button", { name: /VIDUR AI Compact/ }).click();
   await page
     .getByRole("button", { name: "Thinking mode", exact: true })
     .click();
@@ -116,9 +115,7 @@ try {
       () => globalThis.daemonRequests.length,
     );
     await page.getByRole("button", { name: "New chat", exact: true }).click();
-    await page
-      .getByRole("heading", { name: "Where shall we begin?", exact: true })
-      .waitFor();
+    await expectWelcome(page);
     assert.equal(
       await app.evaluate(() => globalThis.daemonRequests.length),
       beforeRequests,

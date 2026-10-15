@@ -1,6 +1,6 @@
 import { createServer } from "vite";
 import { verifySidebar } from "./sidebar.mjs";
-import { verifyNewChatPreferences } from "./new-chat.mjs";
+import { verifyNewChatPreferences, expectWelcome } from "./new-chat.mjs";
 import { chromium, _electron as electron } from "playwright";
 import assert from "node:assert/strict";
 import { mkdir, readFile, mkdtemp } from "node:fs/promises";
@@ -44,9 +44,7 @@ try {
   await verifySidebar(page, !mode);
   await page.locator(".model-button").click();
   assert.equal(await page.locator(".model-menu > button").count(), 2);
-  await page
-    .getByRole("button", { name: /VIDUR AI Compact — Demo option/ })
-    .click();
+  await page.getByRole("button", { name: /VIDUR AI Compact/ }).click();
   assert.match(
     await page.locator(".model-button").innerText(),
     /VIDUR AI Compact/,
@@ -541,12 +539,7 @@ try {
       .getByRole("heading", { name: "VIDUR AI", exact: true })
       .waitFor();
     await page.getByRole("button", { name: "New chat", exact: true }).click();
-    await page
-      .getByRole("heading", {
-        name: "Where shall we begin, Mira?",
-        exact: true,
-      })
-      .waitFor();
+    await expectWelcome(page, "Mira");
   }
   console.log(
     `${mode ? "Electron" : "Browser"}: persistence, chat switching, rename, delete confirmation, retained artifacts, previews, file actions, model selector and disconnected states passed.`,
