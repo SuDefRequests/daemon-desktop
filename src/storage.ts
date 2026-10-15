@@ -1,4 +1,4 @@
-import type { Artifact, Workspace } from "./types";
+import type { Artifact, Workspace, UserPreferences } from "./types";
 import { uniqueFilename } from "./filenames";
 const key = "daemon-workspace-v1";
 export const emptyWorkspace = (): Workspace => ({
@@ -71,4 +71,61 @@ export function downloadArtifact(artifact: Artifact) {
   a.download = artifact.name;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+const settingsKey = "daemon-settings-v1";
+function browserSettings(): Record<string, unknown> {
+  const settings = JSON.parse(localStorage.getItem(settingsKey) || "{}");
+  if (!settings || typeof settings !== "object" || Array.isArray(settings))
+    throw new Error("Saved preferences are invalid.");
+  return settings;
+}
+function preferredName(value: unknown): string {
+  if (
+    typeof value !== "string" ||
+    value.length > 80 ||
+    /[\u0000-\u001f\u007f]/.test(value)
+  )
+    throw new Error(
+      "Preferred name must be at most 80 characters without control characters.",
+    );
+  return value.trim();
+}
+const restartPreferences =
+  "Close VIDUR AI completely and restart it to load the updated preferences service.";
+function preferenceServiceError(error: unknown): never {
+  if (/No handler registered.*preferences:/i.test((error as Error).message))
+    throw new Error(restartPreferences);
+  throw error;
+}
+export async function loadPreferences(): Promise<UserPreferences> {
+  if (window.daemon) {
+    if (typeof window.daemon.getPreferences !== "function")
+      throw new Error(restartPreferences);
+    try {
+      return await window.daemon.getPreferences();
+    } catch (error) {
+      return preferenceServiceError(error);
+    }
+  }
+  return {
+    preferredName: preferredName(browserSettings().preferredName ?? ""),
+  };
+}
+export async function savePreferredName(
+  value: string,
+): Promise<UserPreferences> {
+  const name = preferredName(value);
+  if (window.daemon) {
+    if (typeof window.daemon.setPreferredName !== "function")
+      throw new Error(restartPreferences);
+    try {
+      return await window.daemon.setPreferredName(name);
+    } catch (error) {
+      return preferenceServiceError(error);
+    }
+  }
+  const next = { ...browserSettings(), preferredName: name };
+  localStorage.setItem(settingsKey, JSON.stringify(next));
+  return { preferredName: name };
 }
