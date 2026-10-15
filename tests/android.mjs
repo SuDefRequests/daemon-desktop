@@ -1,10 +1,14 @@
 import { createServer } from "vite";
 import { expectWelcome } from "./new-chat.mjs";
+import { stubArtifactApplications } from "./application-stubs.mjs";
 import { _electron as electron } from "playwright";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, mkdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import presentation from "../electron/presentation.cjs";
+import document from "../electron/document.cjs";
+const { validatePptx } = presentation;
 const temp = await mkdtemp(path.join(os.tmpdir(), "daemon-android-fixtures-"));
 let app, page;
 const devServer = await createServer({
@@ -24,6 +28,7 @@ try {
     },
   });
   page = await app.firstWindow();
+  await stubArtifactApplications(app, temp);
   await page.getByRole("heading", { name: "VIDUR AI", exact: true }).waitFor();
   await page.waitForFunction(
     () => !document.querySelector("textarea").disabled,
@@ -183,13 +188,25 @@ try {
       "automate_word",
       "# Report\n\n- Findings",
       "Draft a document about project report",
-      "project_report.md",
+      "project_report.docx",
+    ],
+    [
+      "automate_word",
+      "# Virat Kohli\n\nReturned model biography text.",
+      "create a word file for virat kohli",
+      "virat_kohli.docx",
+    ],
+    [
+      "automate_word",
+      "Environmental management is the topic of this returned model paragraph.",
+      "write an essay on environmental management",
+      "environmental_management.docx",
     ],
     [
       "automate_ppt",
-      "Introduction. Main points. Conclusion.",
+      "# E-waste\n\n## Collection\n- Collect electronics separately.\n\n## Repair\n- Repair devices when practical.",
       "Create a presentation about project overview",
-      "project_overview.txt",
+      "project_overview.pptx",
     ],
   ];
   for (const [action, content, prompt, name] of fixtures) {
@@ -211,11 +228,155 @@ try {
     const artifact = workspace.artifacts.find((a) => a.name === name);
     assert.equal(artifact.source, "android");
     assert.equal(path.basename(artifact.path), name);
-    assert.equal(await readFile(artifact.path, "utf8"), content);
+    if (action === "automate_ppt") {
+      const bytes = await readFile(artifact.path);
+      const zip = await validatePptx(bytes, 3);
+      assert.ok(
+        (await zip.file("ppt/slides/slide2.xml").async("string")).includes(
+          "Collect electronics separately.",
+        ),
+      );
+      // Electron downloads are observed through its native session, rather than
+      // Playwright's browser-only download handling.
+      await app.evaluate(({ session }, destination) => {
+        globalThis.pptxDownload = new Promise((resolve) => {
+          session.defaultSession.once("will-download", (_event, item) => {
+            item.setSavePath(destination);
+            item.once("done", (_event, state) =>
+              resolve({
+                state,
+                name: item.getFilename(),
+                path: item.getSavePath(),
+              }),
+            );
+          });
+        });
+      }, `${temp}/downloaded.pptx`);
+      // Desktop cards expose Open/Reveal. Exercise the shared download helper
+      // directly without adding another UI control for this task.
+      await page.evaluate(async (artifact) => {
+        const { downloadArtifact } = await import("/src/storage.ts");
+        await downloadArtifact(artifact);
+      }, artifact);
+      const downloaded = await app.evaluate(() =>
+        Promise.race([
+          globalThis.pptxDownload,
+          new Promise((_resolve, reject) =>
+            setTimeout(
+              () => reject(new Error("Electron download did not complete")),
+              10000,
+            ),
+          ),
+        ]),
+      );
+      assert.equal(downloaded.state, "completed");
+      assert.equal(downloaded.name, name);
+      assert.deepEqual(await readFile(downloaded.path), bytes);
+      assert.equal(artifact.content, content);
+      assert.equal(artifact.presentationStatus, "unknown");
+    } else if (action === "automate_word") {
+      const bytes = await readFile(artifact.path);
+      const zip = await document.validateDocx(bytes);
+      const xml = await zip.file("word/document.xml").async("string");
+      for (const line of content
+        .split("\n")
+        .map((line) => line.replace(/^(?:#+|[-*])\s+/, "").trim())
+        .filter(Boolean))
+        assert.ok(xml.includes(line));
+      const downloaded = await page.evaluate(
+        async (id) =>
+          Array.from(new Uint8Array(await window.daemon.readDocument(id))),
+        artifact.id,
+      );
+      assert.deepEqual(Buffer.from(downloaded), bytes);
+    } else assert.equal(await readFile(artifact.path, "utf8"), content);
+    const auto = await app.evaluate(() => globalThis.daemonAppActions);
+    assert.equal(
+      auto.filter(([, target]) => target === artifact.path).length,
+      1,
+    );
+    assert.equal(
+      auto.at(-1)[0],
+      action === "automate_vscode" ? "vscode" : "default",
+    );
+    const duplicate = await page.evaluate(
+      (a) => window.daemon.saveArtifact(a),
+      artifact,
+    );
+    assert.equal(duplicate.id, artifact.id);
+    assert.equal(duplicate.opening.status, "already-saved");
+    assert.deepEqual(
+      await app.evaluate(() => globalThis.daemonAppActions),
+      auto,
+    );
+    if (action === "automate_word")
+      await page
+        .getByRole("button", {
+          name: "Open document (default app)",
+          exact: true,
+        })
+        .waitFor();
+    if (action === "automate_ppt")
+      await page
+        .getByRole("button", {
+          name: "Open presentation (default app)",
+          exact: true,
+        })
+        .waitFor();
     await page.getByRole("button", { name: "Preview", exact: true }).click();
     assert.equal(await page.locator("pre").innerText(), content);
     await page.getByRole("button", { name: "Close dialog" }).click();
   }
+  await submit(
+    {
+      data: {
+        action: "automate_ppt",
+        filename: "partial.pptx",
+        content:
+          "Recycling devices can recover materials. Another thought that was cut",
+        generation_status: "partial",
+      },
+    },
+    "Make a PPT about recycling",
+  );
+  assert.match(
+    await page.locator(".message.assistant").innerText(),
+    /Partial model output/,
+  );
+  const partialArtifact = (
+    await page.evaluate(() => window.daemon.load())
+  ).artifacts.find((a) => a.name === "ppt_about_recycling.pptx");
+  assert.ok(partialArtifact);
+  assert.equal(partialArtifact.presentationStatus, "partial");
+  const partialZip = await validatePptx(await readFile(partialArtifact.path));
+  assert.ok(
+    (await partialZip.file("ppt/slides/slide1.xml").async("string")).includes(
+      "Another thought that was cut",
+    ),
+  );
+  const failedSaveCount = (await page.evaluate(() => window.daemon.load()))
+    .artifacts.length;
+  await assert.rejects(
+    page.evaluate(
+      (a) =>
+        window.daemon.saveArtifact({
+          ...a,
+          id: crypto.randomUUID(),
+          name: "invalid.pptx",
+          content: "{}",
+        }),
+      partialArtifact,
+    ),
+    /No usable presentation/,
+  );
+  assert.equal(
+    (await page.evaluate(() => window.daemon.load())).artifacts.length,
+    failedSaveCount,
+  );
+  await assert.rejects(
+    page.evaluate(() => window.daemon.readPresentation("../../unregistered")),
+    /File not found/,
+  );
   await app.evaluate(({ shell }) => {
     globalThis.languageReveals = [];
     shell.showItemInFolder = (path) => {
@@ -260,9 +421,18 @@ try {
     await page.getByRole("button", { name: "Preview", exact: true }).click();
     assert.equal(await page.locator("pre").innerText(), content);
     await page.getByRole("button", { name: "Close dialog" }).click();
-    await assert.rejects(
-      page.evaluate((id) => window.daemon.openArtifact(id), artifact.id),
-      /could execute code/,
+    assert.equal(
+      (await app.evaluate(() => globalThis.daemonAppActions)).filter(
+        ([, target]) => target === artifact.path,
+      ).length,
+      1,
+    );
+    await page
+      .getByRole("button", { name: "Open in VS Code", exact: true })
+      .click();
+    assert.deepEqual(
+      (await app.evaluate(() => globalThis.daemonAppActions)).at(-1),
+      ["vscode", artifact.path],
     );
     await page
       .getByRole("button", { name: "Show in folder", exact: true })
@@ -323,6 +493,53 @@ try {
       );
     }
   }
+  await app.evaluate(() => {
+    globalThis.daemonOpenError = "No associated document application (fixture)";
+  });
+  await submit(
+    {
+      data: {
+        action: "automate_word",
+        content: "Actual model text retained despite an opening failure.",
+        filename: "ignored.docx",
+      },
+    },
+    "Create a Word document about opening failure",
+  );
+  assert.match(
+    await page.getByRole("alert").innerText(),
+    /Saved opening_failure.docx.*Automatic opening failed.*No associated/,
+  );
+  assert.equal(
+    await page.getByRole("textbox", { name: "Your prompt" }).inputValue(),
+    "",
+  );
+  const failedOpenArtifact = (
+    await page.evaluate(() => window.daemon.load())
+  ).artifacts.find((a) => a.name === "opening_failure.docx");
+  assert.ok(failedOpenArtifact);
+  await document.validateDocx(await readFile(failedOpenArtifact.path));
+  assert.equal(
+    (await app.evaluate(() => globalThis.daemonAppActions)).filter(
+      ([, target]) => target === failedOpenArtifact.path,
+    ).length,
+    1,
+  );
+  await app.evaluate(() => {
+    globalThis.daemonOpenError = "";
+  });
+  await page
+    .getByRole("button", { name: "Open document (default app)", exact: true })
+    .click();
+  await page
+    .getByText("Open request sent to the default application.", { exact: true })
+    .waitFor();
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
+  assert.equal(
+    await page.locator("pre").innerText(),
+    failedOpenArtifact.content,
+  );
+  await page.getByRole("button", { name: "Close dialog" }).click();
   const before = (await page.evaluate(() => window.daemon.load())).artifacts
     .length;
   await submit(
@@ -340,6 +557,30 @@ try {
     /not supported/,
   );
   const failures = [
+    [
+      { data: { action: "automate_ppt", filename: "empty.pptx", content: "" } },
+      /empty content/,
+    ],
+    [
+      {
+        data: {
+          action: "automate_ppt",
+          filename: "invalid.pptx",
+          content: "{broken output",
+        },
+      },
+      /No usable presentation/,
+    ],
+    [
+      {
+        data: {
+          action: "automate_ppt",
+          filename: "timeout.pptx",
+          content: "Error: AI timed out.",
+        },
+      },
+      /Android brain/,
+    ],
     [{ raw: "{bad" }, /malformed JSON/],
     [
       { data: { action: "automate_word", content: "text" } },

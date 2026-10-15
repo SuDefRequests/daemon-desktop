@@ -1,6 +1,7 @@
 import { createServer } from "vite";
 import { verifySidebar } from "./sidebar.mjs";
 import { verifyNewChatPreferences, expectWelcome } from "./new-chat.mjs";
+import { stubArtifactApplications } from "./application-stubs.mjs";
 import { chromium, _electron as electron } from "playwright";
 import assert from "node:assert/strict";
 import { mkdir, readFile, mkdtemp } from "node:fs/promises";
@@ -28,6 +29,7 @@ try {
       },
     });
     page = await desktop.firstWindow();
+    await stubArtifactApplications(desktop, temp);
   } else {
     browser = await chromium.launch({ headless: true });
     page = await browser.newPage({
@@ -106,6 +108,60 @@ try {
   assert.equal(providerCheck.browser, "mock");
   assert.deepEqual(providerCheck.calls, [["Meeting notes"]]);
   assert.equal(providerCheck.result.file.name, "meeting_notes.txt");
+  const actionLabels = await page.evaluate(async () => {
+    const { artifactOpenAction } = await import("/src/artifact-actions.ts");
+    const { documentFilename } = await import("/src/filenames.ts");
+    return {
+      labels: [
+        "py",
+        "js",
+        "ts",
+        "c",
+        "cpp",
+        "java",
+        "html",
+        "css",
+        "rs",
+        "go",
+        "sh",
+        "docx",
+        "pptx",
+        "xlsx",
+        "csv",
+        "pdf",
+        "txt",
+        "md",
+      ].map((ext) => artifactOpenAction("sample." + ext).label),
+      unsupported: artifactOpenAction("bad.exe").enabled,
+      names: [
+        "create a word file for virat kohli",
+        "create a Word document about Virat Kohli",
+        "write an essay on environmental management",
+        "make a Word file",
+        "create a Word document about ../CON",
+        "Draft a document about project report",
+      ].map(documentFilename),
+    };
+  });
+  assert.deepEqual(actionLabels.labels, [
+    ...Array(11).fill("Open in VS Code"),
+    "Open document (default app)",
+    "Open presentation (default app)",
+    "Open spreadsheet (default app)",
+    "Open CSV (default app)",
+    "Open PDF",
+    "Open file",
+    "Open file",
+  ]);
+  assert.equal(actionLabels.unsupported, false);
+  assert.deepEqual(actionLabels.names, [
+    "virat_kohli.docx",
+    "virat_kohli.docx",
+    "environmental_management.docx",
+    "document.docx",
+    "daemon_con.docx",
+    "project_report.docx",
+  ]);
   // Only browser preview lacks a desktop API. Electron uses its supplied API.
   if (!mode) assert.match(providerCheck.unavailable, /requires Electron/);
   if (mode) {
@@ -280,18 +336,13 @@ try {
     await page.getByRole("button", { name: "My files", exact: true }).click();
     assert.equal(
       await page
-        .getByRole("button", { name: "Open file", exact: true })
+        .getByRole("button", { name: "Open in VS Code", exact: true })
         .isEnabled(),
-      false,
+      true,
     );
-    await assert.rejects(
-      page.evaluate(async () =>
-        window.daemon.openArtifact(
-          (await window.daemon.load()).artifacts[0].id,
-        ),
-      ),
-      /could execute code/,
-    );
+    await page
+      .getByRole("button", { name: "Open in VS Code", exact: true })
+      .click();
     await page
       .getByRole("button", { name: "Show in folder", exact: true })
       .click();
@@ -379,9 +430,9 @@ try {
     assert.equal(await readFile(second.path, "utf8"), second.content);
     assert.equal(
       await page
-        .getByRole("button", { name: "Open file", exact: true })
+        .getByRole("button", { name: "Open in VS Code", exact: true })
         .isEnabled(),
-      false,
+      true,
     );
     await page
       .getByRole("button", { name: "Show in folder", exact: true })

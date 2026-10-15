@@ -126,15 +126,15 @@ const json = (data) =>
     ["automate_notepad", "Meeting notes", ".txt", "document"],
     ["automate_notepad", "**Meeting notes**", ".md", "document"],
     ["automate_excel", "Item,Price\nNotebook,5", ".csv", "spreadsheet"],
-    ["automate_word", "Project description", ".txt", "document"],
-    ["automate_word", "# Project\n\n- Plan", ".md", "document"],
+    ["automate_word", "Project description", ".docx", "document"],
+    ["automate_word", "# Project\n\n- Plan", ".docx", "document"],
     [
       "automate_ppt",
       "Introduction. Main points. Conclusion.",
-      ".txt",
+      ".pptx",
       "presentation",
     ],
-    ["automate_ppt", "# Slide 1\n\n- Idea", ".md", "presentation"],
+    ["automate_ppt", "# Slide 1\n\n- Idea", ".pptx", "presentation"],
   ];
   for (const [action, content, extension, kind] of cases) {
     const result = convertResponse(payload(action, content));
@@ -143,6 +143,26 @@ const json = (data) =>
     assert.equal(result.file.content, content);
     assert.equal(result.file.name, undefined);
   }
+  for (const [status, notice] of [
+    ["complete", /finished/],
+    ["partial", /Partial model output/],
+    ["unknown", /may be partial/],
+  ]) {
+    const result = convertResponse({
+      ...payload("automate_ppt", "Recycling electronics matters."),
+      generation_status: status,
+    });
+    assert.equal(result.file.presentationStatus, status);
+    assert.match(result.reply, notice);
+  }
+  assert.throws(
+    () =>
+      convertResponse({
+        ...payload("automate_ppt", "Content"),
+        generation_status: "finished",
+      }),
+    /status/,
+  );
   assert.equal(
     convertResponse(payload("automate_canva", "project poster")).file,
     undefined,
