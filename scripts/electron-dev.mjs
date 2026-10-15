@@ -22,7 +22,7 @@ try {
   await vite.listen();
   const url = vite.resolvedUrls.local[0];
   if (!url) throw new Error("Vite did not resolve a local development URL.");
-  console.log(`DAEMON development server: ${url}`);
+  console.log(`VIDUR AI development server: ${url}`);
   desktop = spawn(electron, ["."], {
     stdio: "inherit",
     env: {
@@ -33,13 +33,13 @@ try {
     },
   });
   desktop.on("error", (error) => {
-    console.error(`Cannot launch DAEMON: ${error.message}`);
+    console.error(`Cannot launch VIDUR AI: ${error.message}`);
     void stop(1);
   });
   desktop.on("exit", (code) => void stop(code ?? 1));
 } catch (error) {
   console.error(
-    `DAEMON development startup failed (preferred port 5173): ${error.message}`,
+    `VIDUR AI development startup failed (preferred port 5173): ${error.message}`,
   );
   await stop(1);
 }
