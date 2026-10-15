@@ -1,4 +1,9 @@
-import type { Artifact, Workspace, UserPreferences } from "./types";
+import type {
+  Artifact,
+  Workspace,
+  UserPreferences,
+  SavedArtifact,
+} from "./types";
 import { uniqueFilename } from "./filenames";
 const key = "daemon-workspace-v1";
 export const emptyWorkspace = (): Workspace => ({
@@ -51,7 +56,9 @@ export async function saveWorkspace(data: Workspace) {
 export async function saveArtifact(
   artifact: Artifact,
   existing: Artifact[] = [],
-) {
+): Promise<SavedArtifact> {
+  if (/\.(pptx|docx)$/.test(artifact.name) && !window.daemon)
+    throw new Error("Office file creation requires the desktop application.");
   return window.daemon
     ? window.daemon.saveArtifact(artifact)
     : {
@@ -62,9 +69,24 @@ export async function saveArtifact(
         ),
       };
 }
-export function downloadArtifact(artifact: Artifact) {
+export async function downloadArtifact(artifact: Artifact) {
+  const presentation = artifact.name.endsWith(".pptx");
+  const wordDocument = artifact.name.endsWith(".docx");
+  if ((presentation || wordDocument) && !window.daemon)
+    throw new Error("Office file download requires the desktop application.");
+  const data = presentation
+    ? await window.daemon!.readPresentation(artifact.id)
+    : wordDocument
+      ? await window.daemon!.readDocument(artifact.id)
+      : artifact.content;
   const url = URL.createObjectURL(
-    new Blob([artifact.content], { type: "text/plain;charset=utf-8" }),
+    new Blob([data], {
+      type: presentation
+        ? "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        : wordDocument
+          ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          : "text/plain;charset=utf-8",
+    }),
   );
   const a = document.createElement("a");
   a.href = url;
