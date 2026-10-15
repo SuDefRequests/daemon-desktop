@@ -26,10 +26,10 @@ export const mockProvider: InferenceProvider = {
     const samples = {
       code: {
         content:
-          '# DAEMON mock example — review before use.\n# This fixed example is not inferred from your prompt.\ndef calculate_total(values):\n    return sum(values)\n\nif __name__ == "__main__":\n    print(calculate_total([10, 20, 30]))\n',
+          '# VIDUR AI mock example — review before use.\n# This fixed example is not inferred from your prompt.\ndef calculate_total(values):\n    return sum(values)\n\nif __name__ == "__main__":\n    print(calculate_total([10, 20, 30]))\n',
       },
       document: {
-        content: `# Draft document\n\nRequested brief: ${title}\n\n## Overview\nThis is a sample document created by DAEMON in mock mode.\n\n## Next steps\n- Clarify the objective and audience.\n- Gather supporting information.\n- Review and refine the draft.\n`,
+        content: `# Draft document\n\nRequested brief: ${title}\n\n## Overview\nThis is a sample document created by VIDUR AI in mock mode.\n\n## Next steps\n- Clarify the objective and audience.\n- Gather supporting information.\n- Review and refine the draft.\n`,
       },
       presentation: {
         content: `# Presentation outline\n\nBrief: ${title}\n\n## Slide 1 — Introduction\nIntroduce the topic and the purpose.\n\n## Slide 2 — Key ideas\nDescribe three key points with examples.\n\n## Slide 3 — Next steps\nSummarize and suggest a next action.\n\nMock outline; this is a Markdown file, not a PowerPoint deck.\n`,
