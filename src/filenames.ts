@@ -7,6 +7,28 @@ const extensions: Record<Exclude<Task, "chat">, string> = {
   spreadsheet: ".csv",
 };
 
+export function documentFilename(prompt: string): string {
+  const title = prompt
+    .trim()
+    .replace(
+      /^(?:please\s+)?(?:write|create|generate|make|draft|prepare|produce|save|export)\s+/i,
+      "",
+    )
+    .replace(
+      /^(?:(?:a|an|the|short|brief|detailed)\s+)*(?:(?:microsoft\s+)?word\s+(?:file|document)|docx(?:\s+file)?|essay|report|document)\b(?:\s+(?:as|in)\s+(?:a\s+)?(?:word\s+(?:document|file)|docx))?(?:\s+(?:on|about|for|regarding))?\s*/i,
+      "",
+    );
+  return (
+    artifactFilename(title, "document")
+      .slice(0, -3)
+      .split("_")
+      .slice(0, 4)
+      .join("_")
+      .slice(0, 48)
+      .replace(/_+$/, "") + ".docx"
+  );
+}
+
 /** Portable filenames: no paths, Windows device names, trailing dots or UUIDs. */
 export function artifactFilename(
   title: string,
