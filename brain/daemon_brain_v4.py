@@ -73,6 +73,65 @@ def generate_text(prompt, max_tokens):
         return f"Error: {e}"
 
 
+# Canonical IDs are carried only on code responses; other actions are unchanged.
+CODE_LANGUAGES = {
+    "python": ("Python", ".py", r"python|py"),
+    "javascript": ("JavaScript", ".js", r"javascript|js"),
+    "typescript": ("TypeScript", ".ts", r"typescript|ts"),
+    "c": ("C", ".c", r"c"),
+    "cpp": ("C++", ".cpp", r"c\+\+|cpp|cxx"),
+    "java": ("Java", ".java", r"java"),
+    "html": ("HTML", ".html", r"html"),
+    "css": ("CSS", ".css", r"css"),
+    "rust": ("Rust", ".rs", r"rust|rs"),
+    "go": ("Go", ".go", r"go|golang"),
+    "shell": ("Shell", ".sh", r"bash|shell|sh"),
+}
+UNSUPPORTED_CODE_LANGUAGES = r"c#|csharp|ruby|php|kotlin|swift|scala|dart|perl|lua|sql|r|powershell"
+CODE_LANGUAGE_PATTERN = "|".join(value[2] for value in CODE_LANGUAGES.values()) + "|" + UNSUPPORTED_CODE_LANGUAGES
+
+
+def get_code_language(text):
+    # Recognize language instructions, not arbitrary mentions in task data.
+    text = text.lower()
+    def unquote(match):
+        value = next(group for group in match.groups() if group is not None)
+        return value if re.fullmatch(CODE_LANGUAGE_PATTERN, value) else " "
+    text = re.sub(r'"([^"\n]*)"|\'([^\'\n]*)\'|`([^`\n]*)`', unquote, text)
+    candidates = set()
+    fallback = set()
+    mentions = []
+    patterns = [(key, value[2]) for key, value in CODE_LANGUAGES.items()]
+    patterns.append(("unsupported", UNSUPPORTED_CODE_LANGUAGES))
+    for language, pattern in patterns:
+        for match in re.finditer(r"(?<![\w+#])(?:" + pattern + r")(?![\w+#])", text):
+            before, after = text[:match.start()], text[match.end():]
+            if re.search(r"\b(?:not|rather than|instead of)\s+$", before):
+                continue
+            mentions.append((match.start(), match.end(), language))
+            if (re.search(r"\b(?:in|using|with)\s+(?:the\s+)?$", before)
+                    or re.match(r"\s+(?:code|program|function|class|script|file|page|stylesheet|app|application)\b", after)):
+                candidates.add(language)
+            elif re.search(r"\b(?:write|create|generate|make|build|give|provide)\s+(?:(?:a|an|the|some|simple|basic|me|us)\s+)*$", before):
+                fallback.add(language)
+        if language in CODE_LANGUAGES and re.search(re.escape(CODE_LANGUAGES[language][1]) + r"\b", text):
+            candidates.add(language)
+    if not candidates:
+        candidates = fallback
+    mentions.sort()
+    for first, second in zip(mentions, mentions[1:]):
+        if re.fullmatch(r"\s*(?:or|and|/)\s*", text[first[1]:second[0]]) and ({first[2], second[2]} & candidates):
+            candidates.update((first[2], second[2]))
+    if not candidates:
+        unknown = re.search(r"\b(?:write|create|generate|make|build|give|provide)\s+(?:(?:a|an|the|some|simple|basic|me|us|short|small|raw|new)\s+)*([a-z][a-z0-9+#.-]*)\s+(?:code|program|script|function)\b", text)
+        if unknown and unknown[1] not in {"a", "an", "the", "some", "simple", "basic", "me", "us", "short", "small", "raw", "new", "sample", "example", "plain", "working", "test", "generic", "computer"}:
+            return None
+        if re.search(r"\b(?:code|program|script|function|class|page|stylesheet)\s+(?:in|using)\s+[a-z][a-z0-9+#]*", text):
+            return None
+        return "python"  # Preserve the existing default for generic code requests.
+    return next(iter(candidates)) if len(candidates) == 1 and "unsupported" not in candidates else None
+
+
 def get_intent(text):
     # Require a creation request and a named output, not incidental substrings.
     text = text.lower()
@@ -83,7 +142,7 @@ def get_intent(text):
     # code/notes before that verb must not choose an artifact type.
     prefix = text[:creation.start()]
     if not re.fullmatch(
-        r"\s*(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?|"
+        r"\s*(?:(?:in|using)\s+(?:" + CODE_LANGUAGE_PATTERN + r")\s*,?\s*)?(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?|"
         r"i\s+(?:want|need|would like)\s+(?:you\s+)?to\s+)?", prefix
     ):
         return "chat"
@@ -94,7 +153,7 @@ def get_intent(text):
         return "chat"
     target = re.split(r"\b(?:about|for|regarding|on the topic of)\b", target, maxsplit=1)[0]
     outputs = [
-        ("vscode", r"python\s+(?:code|script|file|program)|code|script|program|\.py\b"),
+        ("vscode", r"code|script|program|function|parser|module|(?:html|css)\s+(?:document|table|form|button|layout|styles?)|(?:class|page|stylesheet)\s+(?:in|using)\s+(?:" + CODE_LANGUAGE_PATTERN + r")|(?:" + CODE_LANGUAGE_PATTERN + r")\s+(?:class|page|stylesheet|file|app|application)|[\w-]*\.(?:py|js|ts|c|cpp|java|html|css|rs|go|sh)\b"),
         ("excel", r"excel(?:\s+(?:file|workbook))?|spreadsheet|csv(?:\s+file)?|table|\.csv\b"),
         ("canva", r"canva(?:\s+design)?|poster|design"),
         ("ppt", r"ppt|powerpoint|slides?|presentation"),
@@ -136,11 +195,15 @@ def process_command():
         resp = jsonify({"action": "chat", "content": output, "filename": ""})
 
     elif intent == "vscode":
+        language = get_code_language(user_prompt)
+        if language is None:
+            return jsonify({"action": "chat", "content": "Please choose one supported programming language: Python, JavaScript, TypeScript, C, C++, Java, HTML, CSS, Rust, Go, or Shell.", "filename": ""})
+        label, extension, _ = CODE_LANGUAGES[language]
         output = generate_text(
-            f"Write simple python code for: {user_prompt}. "
+            f"Write simple {label} code for: {user_prompt}. "
             f"ONLY output raw code, no comments, no explanation, no markdown.", ceiling)
-        output = output.replace("```python", "").replace("```", "").strip()
-        resp = jsonify({"action": "automate_vscode", "content": output, "filename": f"{context_name}.py"})
+        resp = jsonify({"action": "automate_vscode", "content": output,
+                        "filename": f"{context_name}{extension}", "language": language})
 
     elif intent == "excel":
         output = generate_text(f"Generate rows of CSV data for: {user_prompt}. No headers.", ceiling)
