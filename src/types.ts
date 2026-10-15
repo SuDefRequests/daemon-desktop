@@ -21,17 +21,24 @@ export interface ConnectionStatus {
   detail: string;
 }
 export type ProviderMode = "mock" | "android";
+export type PresentationStatus = "complete" | "partial" | "unknown";
 export interface InferenceRequest {
   prompt: string;
   task: Task;
 }
 export interface InferenceResult {
   reply: string;
-  file?: { name: string; content: string; kind: Exclude<Task, "chat"> };
+  file?: {
+    name: string;
+    content: string;
+    kind: Exclude<Task, "chat">;
+    presentationStatus?: PresentationStatus;
+  };
 }
 export interface BrainResult {
   reply: string;
   file?: {
+    presentationStatus?: PresentationStatus;
     content: string;
     kind: Exclude<Task, "chat">;
     extension:
@@ -48,6 +55,8 @@ export interface BrainResult {
       | ".sh"
       | ".txt"
       | ".csv"
+      | ".pptx"
+      | ".docx"
       | ".md";
   };
 }
@@ -70,6 +79,7 @@ export interface Conversation {
   messages: Message[];
 }
 export interface Artifact {
+  presentationStatus?: PresentationStatus;
   id: string;
   conversationId: string;
   name: string;
@@ -82,6 +92,13 @@ export interface Artifact {
 export interface Workspace {
   conversations: Conversation[];
   artifacts: Artifact[];
+}
+export interface OpenResult {
+  status: "requested" | "failed" | "already-saved";
+  message: string;
+}
+export interface SavedArtifact extends Artifact {
+  opening?: OpenResult;
 }
 export interface UserPreferences {
   preferredName: string;
@@ -96,8 +113,10 @@ export interface DesktopAPI {
   generate(prompt: string): Promise<BrainResult>;
   load(): Promise<Workspace>;
   save(data: Workspace): Promise<void>;
-  saveArtifact(artifact: Artifact): Promise<Artifact>;
-  openArtifact(id: string): Promise<void>;
+  saveArtifact(artifact: Artifact): Promise<SavedArtifact>;
+  readPresentation(id: string): Promise<ArrayBuffer>;
+  readDocument(id: string): Promise<ArrayBuffer>;
+  openArtifact(id: string): Promise<OpenResult>;
   revealArtifact(id: string): Promise<void>;
   getOutputDirectory(): Promise<string>;
   chooseOutputDirectory(): Promise<string | null>;
