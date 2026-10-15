@@ -165,6 +165,14 @@ def get_intent(text):
         return "chat"
     if re.match(r"(?:(?:me|us)\s+)?(?:(?:a|an|the|short|simple|detailed|brief)\s+)*(?:explanation|answer|response|reply|greeting|message)\b", target):
         return "chat"
+    # Essays/reports are chat unless a document format is explicitly requested.
+    # Inspect format instructions before trimming the topic ("... about X in Word").
+    if re.match(r"(?:(?:me|us|a|an|the|short|brief|detailed)\s+)*(?:essay|report)\b", target):
+        document_requested = re.search(
+            r"\b(?:in|as|using)\s+(?:(?:a|an|the|microsoft)\s+)*(?:word|docx|document)\b|"
+            r"\bword\s+(?:file|document)\b|\.docx\b|"
+            r"\b(?:save|export)\s+(?:(?:it|this)\s+)?as\s+(?:a\s+)?(?:docx|document)\b", target)
+        return "word" if document_requested else "chat"
     target = re.split(r"\b(?:about|for|regarding|on the topic of)\b", target, maxsplit=1)[0]
     outputs = [
         ("vscode", r"code|script|program|function|parser|module|(?:html|css)\s+(?:document|table|form|button|layout|styles?)|(?:class|page|stylesheet)\s+(?:in|using)\s+(?:" + CODE_LANGUAGE_PATTERN + r")|(?:" + CODE_LANGUAGE_PATTERN + r")\s+(?:class|page|stylesheet|file|app|application)|[\w-]*\.(?:py|js|ts|c|cpp|java|html|css|rs|go|sh)\b"),
@@ -198,6 +206,7 @@ def process_command():
     print(f"[DAEMON] Incoming request: {user_prompt!r}", flush=True)
 
     intent = get_intent(user_prompt)
+    print(f"[VIDUR AI] Routed intent: {intent}", flush=True)
     ceiling = TOKEN_CEILING["word" if intent == "chat" else intent]
 
     words = re.sub(r'[^a-zA-Z0-9 ]', '', user_prompt).split()

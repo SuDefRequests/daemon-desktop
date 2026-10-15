@@ -201,6 +201,8 @@ const missing = () => Object.assign(new Error("not found"), { code: "ENOENT" });
     });
     await opener.open("C:\\Saved\\file.py");
     assert.equal(calls.at(-1)[0], root + "\\Code.exe");
+    if (source === "path")
+      assert.ok(!calls.some(([command]) => command === "reg.exe"));
     assert.ok(calls.every(([, , options]) => options.shell === false));
   }
   console.log(

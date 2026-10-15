@@ -217,8 +217,8 @@ try {
     [
       "automate_word",
       "Environmental management is the topic of this returned model paragraph.",
-      "write an essay on environmental management",
-      "environmental_management.docx",
+      "write an essay in Word about environmental management",
+      "in_word_about_environmental.docx",
     ],
     [
       "automate_ppt",
@@ -227,6 +227,20 @@ try {
       "project_overview.pptx",
     ],
   ];
+  fixtures.push(
+    [
+      "automate_word",
+      "Formula 1 is the subject of this model essay.",
+      "write essay in word about formula 1",
+      "in_word_about_formula.docx",
+    ],
+    [
+      "automate_word",
+      "This second model essay discusses Formula 1.",
+      "write essay in word about formula 1 and save as docx",
+      "in_word_about_formula_2.docx",
+    ],
+  );
   for (const [action, content, prompt, name] of fixtures) {
     await submit(
       {

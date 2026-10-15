@@ -20,6 +20,7 @@ chat = ['Hello Qwen!', 'Why is the Sky Blue?', 'Please note that I am busy', 'Ex
         'What is a spreadsheet?', 'How do I create a Word document?', 'Explain how to write code',
         'Write a short reply about Python', 'Write an explanation of Python code', 'I used to write Python code', 'I do not want to create a document', 'Do not create a document', 'Can you explain this presentation?',
         'Who is Virat Kohli?', 'What is a Word file?', 'How do I write an essay?', 'Explain environmental management', 'Please note that I read a report today',
+        'Write an essay about Formula 1', 'write an essay on environmental management', 'prepare a report about recycling',
         'How do I add three numbers in C++?', 'Show me an example of a Python function',
         'How do I open VS Code and write C++ code?', 'Do not open VS Code and write a program', 'Open VS Code and explain what Python is']
 files = {'Write Python code for MyProject': 'vscode', 'Give me a Python script for hiking': 'vscode', 'Create a CSV for Budget': 'excel',
@@ -27,7 +28,12 @@ files = {'Write Python code for MyProject': 'vscode', 'Give me a Python script f
          'Design a poster for school': 'canva', 'Write notes about Meeting': 'notepad',
          'Save this as a text file': 'notepad', 'create a word file for virat kohli': 'word',
          'create a Word document about Virat Kohli': 'word', 'make a Word file': 'word',
-         'write an essay on environmental management': 'word', 'prepare a report about recycling': 'word',
+         'write essay in word about formula 1': 'word',
+         'write essay in word about formula 1 and save as docx': 'word',
+         'Write an essay in Word about Formula 1.': 'word',
+         'Write an essay in Word about Formula 1 and save as DOCX.': 'word',
+         'Write an essay about Formula 1 and save as DOCX': 'word',
+         'Write a report on environmental management in a Word file.': 'word',
          'write a report as a Word document about recycling': 'word'}
 for current in chat + list(files):
     expected = files.get(current, 'chat')
@@ -35,6 +41,8 @@ for current in chat + list(files):
     result = namespace['process_command']()
     assert result['action'] == ('chat' if expected == 'chat' else 'automate_' + expected), current
     assert current in seen[-1], (current, seen[-1])
+    if expected == 'word':
+        assert result['filename'].endswith('.docx') and result['content'] == 'Model reply'
     if expected == 'chat':
         assert seen[-1] == current and result['filename'] == ''
 print('Brain: chat/default routing, explicit artifact intents, response schema and original prompt case passed.')

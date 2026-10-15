@@ -78,9 +78,31 @@ Device status is shared by the header, sidebar and homepage footer. One main-pro
 
 Deploy the updated `brain/daemon_brain_v4.py` and restart Flask. Its new lightweight `GET /health` returns `{ "service": "vidur-brain", "status": "ok" }` without running inference. Only an authorized device, verified forwarding and this validated response produce “Connected”. An older brain without the health route stays “Brain service unavailable” until updated. Health checks are bounded to 3 seconds and 4 KB. This verifies the Flask service, not model loading or successful Qwen generation. The model name is an expected configuration, not detection. The brain receives individual prompts, not chat history or the UI's task preference.
 
+To deploy this checkout from the Windows repository directory (one authorized phone):
+
+```powershell
+adb push .\brain\daemon_brain_v4.py /sdcard/Download/daemon_brain_v4.py
+```
+
+In the phone terminal currently running Flask, stop **that brain process** with Ctrl+C
+(leave llama-server running). In the same Python environment, run:
+
+```sh
+python /sdcard/Download/daemon_brain_v4.py
+```
+
+For Termux, grant shared-storage access with `termux-setup-storage` first if needed.
+If using a service manager instead of a foreground terminal, stop that brain service
+before running the updated copy; do not run two Flask instances on port 5000.
+Restart the updated desktop app from a fresh terminal so it inherits current PATH.
+Retry `write essay in word about formula 1`: the phone console must show
+`[VIDUR AI] Routed intent: word`. The response action is `automate_word`, and the
+desktop should show a saved DOCX artifact. A health check alone does not establish
+that the updated routing code is deployed or that model inference works.
+
 The `chat` response uses `{ "action": "chat", "content": "...", "filename": "" }` and produces only an assistant message, never a file. Explicit creation requests retain artifact actions; ordinary questions default to chat, and the original prompt case reaches Qwen.
 
-Returned `filename` is validated as a field but never used as a path or authoritative format. `automate_vscode` preserves its validated language extension; `automate_excel` must be consistent CSV and becomes `.csv`; `automate_notepad` becomes Markdown or plain text. `automate_word` creates genuine `.docx` through the local `docx` library, and `automate_ppt` creates genuine `.pptx` through PptxGenJS. Both ZIP/OOXML packages are checked before disk saving and registration. Original model text stays available in Preview. Explicit Word, essay and report requests route to Word; ordinary questions remain chat. No generic essay or presentation is substituted for model content. CSV, malformed output and inference failures are validated before creating artifacts. Canva returns an explanation and search phrase without creating a file or opening a browser. Source code is never executed. Spreadsheet generation remains CSV; XLSX and PDF generation are not implemented by this change. Mock document/presentation samples remain explicitly labelled Markdown examples.
+Returned `filename` is validated as a field but never used as a path or authoritative format. `automate_vscode` preserves its validated language extension; `automate_excel` must be consistent CSV and becomes `.csv`; `automate_notepad` becomes Markdown or plain text. `automate_word` creates genuine `.docx` through the local `docx` library, and `automate_ppt` creates genuine `.pptx` through PptxGenJS. Both ZIP/OOXML packages are checked before disk saving and registration. Original model text stays available in Preview. Explicit Word requests and essays/reports requested in a document format route to Word; essays without a file request remain chat; ordinary questions remain chat. No generic essay or presentation is substituted for model content. CSV, malformed output and inference failures are validated before creating artifacts. Canva returns an explanation and search phrase without creating a file or opening a browser. Source code is never executed. Spreadsheet generation remains CSV; XLSX and PDF generation are not implemented by this change. Mock document/presentation samples remain explicitly labelled Markdown examples.
 
 ## Verification
 

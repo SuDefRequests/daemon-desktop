@@ -37,6 +37,24 @@ function createArtifactOpener({
   };
   const exists = async (file) =>
     (await stat(file).catch(() => null))?.isFile() === true;
+  async function findCode(candidates) {
+    for (let candidate of candidates) {
+      if (!paths.isAbsolute(candidate)) continue;
+      if (paths.basename(candidate).toLowerCase() === "code.cmd")
+        candidate = paths.resolve(paths.dirname(candidate), "..", "Code.exe");
+      if (paths.basename(candidate).toLowerCase() !== "code.exe") continue;
+      const cli = paths.join(
+        paths.dirname(candidate),
+        "resources",
+        "app",
+        "out",
+        "cli.js",
+      );
+      if ((await exists(candidate)) && (await exists(cli)))
+        return { executable: candidate, cli };
+    }
+    return null;
+  }
   async function windowsCode(signal) {
     const candidates = [];
     if (env.DAEMON_VSCODE_PATH) candidates.push(env.DAEMON_VSCODE_PATH);
@@ -48,6 +66,8 @@ function createArtifactOpener({
             signal,
           });
           candidates.push(...stdout.trim().split(/\r?\n/).filter(Boolean));
+          const found = await findCode(candidates);
+          if (found) return found;
         } catch (error) {
           if (error.killed || signal.aborted) throw error;
         }
@@ -73,21 +93,8 @@ function createArtifactOpener({
         }
       }
     }
-    for (let candidate of candidates) {
-      if (!paths.isAbsolute(candidate)) continue;
-      if (paths.basename(candidate).toLowerCase() === "code.cmd")
-        candidate = paths.resolve(paths.dirname(candidate), "..", "Code.exe");
-      if (paths.basename(candidate).toLowerCase() !== "code.exe") continue;
-      const cli = paths.join(
-        paths.dirname(candidate),
-        "resources",
-        "app",
-        "out",
-        "cli.js",
-      );
-      if ((await exists(candidate)) && (await exists(cli)))
-        return { executable: candidate, cli };
-    }
+    const found = await findCode(candidates);
+    if (found) return found;
     throw new Error(
       "VS Code was not found. Install it with its PATH option, or set DAEMON_VSCODE_PATH to its Code.exe path and restart VIDUR AI.",
     );
