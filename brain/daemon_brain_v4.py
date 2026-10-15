@@ -37,7 +37,7 @@ TOKEN_CEILING = {
 REQUEST_TIMEOUT = 240
 
 
-def generate_text(prompt, max_tokens):
+def generate_text(prompt, max_tokens, status=None):
     qwen_prompt = f"<|im_start|>user\n{prompt}<|im_end|>\n<|im_start|>assistant\n"
     start = time.perf_counter()
     print(f"[DAEMON] Sending to llama-server, ceiling={max_tokens} tokens ...", flush=True)
@@ -57,6 +57,15 @@ def generate_text(prompt, max_tokens):
         print(f"[DAEMON] llama-server responded in {elapsed:.1f}s", flush=True)
 
         data = r.json()
+        if status is not None:
+            # Preserve completion information when available, without assuming an
+            # older llama-server reports it. Other inference callers still get text.
+            if data.get("truncated") is True or data.get("stop_type") == "limit" or data.get("stopped_limit") is True:
+                status["state"] = "partial"
+            elif data.get("stop_type") in ("eos", "word") or data.get("stopped_eos") is True or data.get("stopped_word") is True:
+                status["state"] = "complete"
+            else:
+                status["state"] = "unknown"
         output = data.get("content", "").strip()
         return output if output else "Error: Blank output from Qwen."
 
@@ -216,9 +225,11 @@ def process_command():
     elif intent == "ppt":
         # No formatting instructions -- a 0.5B model can't reliably follow
         # multi-slide structure. Plain sentences; slide-splitting happens
-        # deterministically in Daemon_UI.py instead of trusting the model.
-        output = generate_text(f"Write a short presentation script about: {user_prompt}.", ceiling)
-        resp = jsonify({"action": "automate_ppt", "content": output, "filename": f"{context_name}.pptx"})
+        # deterministically on the desktop instead of trusting the model.
+        generation = {}
+        output = generate_text(f"Write a short presentation script about: {user_prompt}.", ceiling, generation)
+        resp = jsonify({"action": "automate_ppt", "content": output, "filename": f"{context_name}.pptx",
+                        "generation_status": generation.get("state", "unknown")})
 
     elif intent == "notepad":
         output = generate_text(f"Write plain text notes for: {user_prompt}.", ceiling)
