@@ -1,3 +1,4 @@
+const { CODE_LANGUAGES, codeFormat } = require("./code-languages.cjs");
 const ENDPOINT = "http://127.0.0.1:5000/process";
 const INFERENCE_TIMEOUT_MS = 600_000;
 const MAX_PROMPT_LENGTH = 12_000;
@@ -42,6 +43,15 @@ function validateResponse(data) {
   )
     throw new Error(
       "Invalid brain response: expected a supported action, content and filename.",
+    );
+  if (
+    Object.hasOwn(data, "language") &&
+    (data.action !== "automate_vscode" ||
+      typeof data.language !== "string" ||
+      !Object.hasOwn(CODE_LANGUAGES, data.language))
+  )
+    throw new Error(
+      "Invalid brain response: unsupported code language metadata.",
     );
   if (!data.content.trim())
     throw new Error("The Android brain returned empty content.");
@@ -124,14 +134,24 @@ function convertResponse(response) {
     text = content;
   if (action === "automate_vscode") {
     kind = "code";
-    extension = ".py";
-    text = unwrapFence(content, ["python", "py", ""]);
-    if (!text.trim())
-      throw new Error("Python response is empty. No file was saved.");
-    if (/^\s*```/.test(text))
+    const format = codeFormat(response);
+    extension = format.extension;
+    const label = extension === ".py" ? "Python" : "Code";
+    const fence = content.match(
+      /^\s*```([^\r\n]*)\r?\n([\s\S]*?)\r?\n```[ \t]*(?:\r?\n)?\s*$/,
+    );
+    if (
+      fence &&
+      (fence[1].trim() === "" ||
+        format.fences.includes(fence[1].trim().toLowerCase()))
+    )
+      text = fence[2];
+    else if (/^\s*```/.test(content))
       throw new Error(
-        "Python response has unsupported code fencing. No file was saved.",
+        `${label} response has unsupported code fencing. No file was saved.`,
       );
+    if (!text.trim())
+      throw new Error(`${label} response is empty. No file was saved.`);
   } else if (action === "automate_excel") {
     kind = "spreadsheet";
     extension = ".csv";
