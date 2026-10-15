@@ -55,3 +55,59 @@ export function uniqueFilename(name: string, existing: string[]): string {
     candidate = `${stem}_${index}${extension}`;
   return candidate;
 }
+
+/** Code names describe the task, rather than repeating the request instructions. */
+export function codeFilename(
+  prompt: string,
+  extension: string,
+  content: string,
+): string {
+  if (extension === ".java") {
+    // Ignore declarations mentioned in comments or string/character literals.
+    const source = content.replace(
+      /\/\*[\s\S]*?\*\/|\/\/[^\n]*|"""[\s\S]*?"""|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g,
+      " ",
+    );
+    const declaration =
+      /\bpublic\s+(?:(?:abstract|final|sealed|non-sealed|strictfp)\s+)*(?:class|interface|enum|record)\s+([\p{L}\p{N}_$]+)/gu;
+    for (const match of source.matchAll(declaration)) {
+      const prefix = source.slice(0, match.index);
+      if (
+        (prefix.match(/\{/g)?.length ?? 0) !==
+        (prefix.match(/\}/g)?.length ?? 0)
+      )
+        continue;
+      const name = match[1];
+      if (
+        !/^[A-Za-z_]\w*$/.test(name) ||
+        name.length > 160 ||
+        /^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/i.test(name)
+      )
+        throw new Error(
+          "The Java public type name cannot be saved as a portable filename.",
+        );
+      return name + extension;
+    }
+  }
+  const subject = prompt
+    .replace(/\bc\+\+/gi, " ")
+    .replace(
+      /\b(?:please|write|create|generate|make|build|implement|a|an|the|basic|simple|python|javascript|typescript|java|cpp|c|html|css|rust|golang|go|shell|bash|code|program|script|function|class|page|file|in|using|for|to|of|that|which)\b/gi,
+      " ",
+    )
+    .replace(/\b(?:adding|add|summing)\b/gi, "sum")
+    .replace(/\b\d+\b/g, " ");
+  // Reuse the existing portable-name sanitization and Windows reserved-name guard.
+  const words = artifactFilename(
+    /[a-z]/i.test(subject) ? subject : "program",
+    "code",
+  )
+    .slice(0, -3)
+    .split("_")
+    .slice(0, 3);
+  const stem =
+    extension === ".java" || extension === ".cpp"
+      ? words.map((word) => word[0].toUpperCase() + word.slice(1)).join("")
+      : words.join("_");
+  return stem + extension;
+}

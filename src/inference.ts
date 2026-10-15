@@ -1,6 +1,6 @@
 import type { DesktopAPI, InferenceProvider, ProviderMode } from "./types";
 import { mockProvider } from "./mock";
-import { artifactFilename } from "./filenames";
+import { artifactFilename, codeFilename } from "./filenames";
 
 export function createProvider(
   mode: ProviderMode,
@@ -24,10 +24,17 @@ export function createProvider(
           ? {
               content: result.file.content,
               kind: result.file.kind,
-              name: artifactFilename(prompt, result.file.kind).replace(
-                /\.[^.]+$/,
-                result.file.extension,
-              ),
+              name:
+                result.file.kind === "code"
+                  ? codeFilename(
+                      prompt,
+                      result.file.extension,
+                      result.file.content,
+                    )
+                  : artifactFilename(prompt, result.file.kind).replace(
+                      /\.[^.]+$/,
+                      result.file.extension,
+                    ),
             }
           : undefined,
       };

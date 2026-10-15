@@ -57,10 +57,10 @@ const cards = [
   {
     task: "code" as Task,
     title: "Write code",
-    description: "Create, debug and save Python scripts",
+    description: "Write code. Build ideas. ",
     icon: Code2,
     color: "blue",
-    prompt: "Write Python code to ",
+    prompt: "Write a  code to ",
   },
   {
     task: "document" as Task,
@@ -861,7 +861,7 @@ export default function App() {
             <span className={`status-dot${connected ? " connected" : ""}`} />
             <span>{deviceLabel}</span>
             <span className="mock-tag">
-              {isMock ? "MOCK MODE" : "ANDROID PROVIDER"}
+              {isMock ? "MOCK MODE" : ""}
             </span>
           </button>
         </header>
@@ -941,7 +941,7 @@ export default function App() {
                 <div className="conversation-title">
                   <h2>{conversation?.title || "New conversation"}</h2>
                   <span className="badge">
-                    {isMock ? "Mock responses" : "Android provider"}
+                    {isMock ? "Mock responses" : ""}
                   </span>
                 </div>
                 <div className="messages">
@@ -1002,7 +1002,7 @@ export default function App() {
                       <LoaderCircle size={17} className="spin" />
                       {isMock
                         ? "Preparing a mock response…"
-                        : "Waiting for the Android brain…"}
+                        : "Thinking…"}
                     </div>
                   )}
                   <div ref={messagesEnd} />
