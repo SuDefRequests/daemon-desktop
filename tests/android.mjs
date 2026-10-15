@@ -168,6 +168,24 @@ try {
   const fixtures = [
     [
       "automate_vscode",
+      "#include <iostream>\nint main() { int a,b,c; std::cin >> a >> b >> c; std::cout << a+b+c; }",
+      "Open VS Code and write a C++ program to add three numbers.",
+      "SumThreeNumbers.cpp",
+    ],
+    [
+      "automate_vscode",
+      "def factorial(n):\n    return 1 if n < 2 else n * factorial(n - 1)",
+      "Create a Python file for factorial.",
+      "factorial.py",
+    ],
+    [
+      "automate_vscode",
+      "int main() { return 0; }",
+      "Create a file named BinarySearch.cpp.",
+      "BinarySearch.cpp",
+    ],
+    [
+      "automate_vscode",
       'print("Hello")',
       "Write Python code for hiking planner",
       "hiking_planner.py",
@@ -217,7 +235,7 @@ try {
           content,
           filename:
             action === "automate_vscode"
-              ? "../../misleading.py"
+              ? "../../misleading" + path.extname(name)
               : "../../misleading.docx",
         },
       },
@@ -493,6 +511,45 @@ try {
       );
     }
   }
+  await app.evaluate(() => {
+    globalThis.daemonCodeError = "VS Code launcher unavailable (fixture)";
+  });
+  await submit(
+    {
+      data: {
+        action: "automate_vscode",
+        content: "int main() { return 42; }",
+        filename: "ignored.cpp",
+        language: "cpp",
+      },
+    },
+    "Open VS Code and write C++ code for launch failure",
+  );
+  assert.match(
+    await page.getByRole("alert").innerText(),
+    /Saved LaunchFailure.cpp.*Automatic opening failed.*VS Code launcher unavailable/,
+  );
+  const savedCode = (
+    await page.evaluate(() => window.daemon.load())
+  ).artifacts.find((a) => a.name === "LaunchFailure.cpp");
+  assert.ok(savedCode);
+  assert.equal(
+    await readFile(savedCode.path, "utf8"),
+    "int main() { return 42; }",
+  );
+  assert.equal(
+    await page.getByRole("textbox", { name: "Your prompt" }).inputValue(),
+    "",
+  );
+  await page
+    .getByRole("button", { name: "Open in VS Code", exact: true })
+    .waitFor();
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
+  assert.equal(await page.locator("pre").innerText(), savedCode.content);
+  await page.getByRole("button", { name: "Close dialog" }).click();
+  await app.evaluate(() => {
+    globalThis.daemonCodeError = "";
+  });
   await app.evaluate(() => {
     globalThis.daemonOpenError = "No associated document application (fixture)";
   });

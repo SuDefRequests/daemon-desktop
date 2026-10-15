@@ -103,9 +103,11 @@ CODE_LANGUAGE_PATTERN = "|".join(value[2] for value in CODE_LANGUAGES.values()) 
 def get_code_language(text):
     # Recognize language instructions, not arbitrary mentions in task data.
     text = text.lower()
+    text = re.sub(r"\b(?:in|using|with)\s+(?:the\s+)?(?:vs\s*code|visual\s+studio\s+code)\b", " ", text)
     def unquote(match):
         value = next(group for group in match.groups() if group is not None)
-        return value if re.fullmatch(CODE_LANGUAGE_PATTERN, value) else " "
+        named_file = re.search(r"\bfile\s+(?:named|called)\s*$", text[:match.start()]) and re.fullmatch(r"[\w.-]+\.(?:py|js|ts|c|cpp|java|html|css|rs|go|sh)", value)
+        return value if re.fullmatch(CODE_LANGUAGE_PATTERN, value) or named_file else " "
     text = re.sub(r'"([^"\n]*)"|\'([^\'\n]*)\'|`([^`\n]*)`', unquote, text)
     candidates = set()
     fallback = set()
@@ -133,7 +135,7 @@ def get_code_language(text):
             candidates.update((first[2], second[2]))
     if not candidates:
         unknown = re.search(r"\b(?:write|create|generate|make|build|give|provide)\s+(?:(?:a|an|the|some|simple|basic|me|us|short|small|raw|new)\s+)*([a-z][a-z0-9+#.-]*)\s+(?:code|program|script|function)\b", text)
-        if unknown and unknown[1] not in {"a", "an", "the", "some", "simple", "basic", "me", "us", "short", "small", "raw", "new", "sample", "example", "plain", "working", "test", "generic", "computer"}:
+        if unknown and unknown[1] not in {"a", "an", "the", "this", "that", "some", "simple", "basic", "me", "us", "short", "small", "raw", "new", "sample", "example", "plain", "working", "test", "generic", "computer"}:
             return None
         if re.search(r"\b(?:code|program|script|function|class|page|stylesheet)\s+(?:in|using)\s+[a-z][a-z0-9+#]*", text):
             return None
@@ -144,6 +146,9 @@ def get_code_language(text):
 def get_intent(text):
     # Require a creation request and a named output, not incidental substrings.
     text = text.lower()
+    # Only normalize an imperative editor-opening preamble, never questions or
+    # incidental editor mentions. The original prompt still reaches the model.
+    text = re.sub(r"^(\s*(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?)?)open\s+(?:vs\s*code|visual\s+studio\s+code)\s*(?:,\s*(?:and\s+)?|\s+(?:and|then)\s+)(?:then\s+)?", r"\1", text)
     creation = re.search(r"\b(?:create|generate|write|draft|make|build|save|export|prepare|produce|design|give|provide)\b", text)
     if not creation or re.search(r"\b(?:don't|do not|never)\s+(?:create|generate|write|make|save|export)\b", text):
         return "chat"

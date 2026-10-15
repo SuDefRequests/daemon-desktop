@@ -111,10 +111,23 @@ export function codeFilename(
       return name + extension;
     }
   }
+  const named = prompt.match(
+    /\bfile\s+(?:named|called)\s+["'`]?([A-Za-z_][\w.-]{0,150}\.[A-Za-z]+)(?=["'`\s.,!?]|$)/i,
+  )?.[1];
+  if (named?.toLowerCase().endsWith(extension)) {
+    let stem = named.slice(0, -extension.length);
+    if (/^(con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\.|$)/i.test(stem))
+      stem = `daemon_${stem}`;
+    return stem + extension;
+  }
   const subject = prompt
+    .replace(
+      /\b(?:open\s+(?:vs\s*code|visual\s+studio\s+code)\s*(?:,|and|then)|(?:in|using)\s+(?:vs\s*code|visual\s+studio\s+code))\b/gi,
+      " ",
+    )
     .replace(/\bc\+\+/gi, " ")
     .replace(
-      /\b(?:please|write|create|generate|make|build|implement|a|an|the|basic|simple|python|javascript|typescript|java|cpp|c|html|css|rust|golang|go|shell|bash|code|program|script|function|class|page|file|in|using|for|to|of|that|which)\b/gi,
+      /\b(?:please|write|create|generate|make|build|implement|a|an|the|basic|simple|python|javascript|typescript|java|cpp|c|html|css|rust|golang|go|shell|bash|code|program|script|function|class|page|file|in|using|for|to|of|this|that|which|and|then)\b/gi,
       " ",
     )
     .replace(/\b(?:adding|add|summing)\b/gi, "sum")

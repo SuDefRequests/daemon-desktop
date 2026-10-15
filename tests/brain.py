@@ -19,7 +19,9 @@ exec(compile(ast.fix_missing_locations(ast.Module(body=constants + functions, ty
 chat = ['Hello Qwen!', 'Why is the Sky Blue?', 'Please note that I am busy', 'Explain Python code', 'Can you make Python easier to understand?', 'Provide information about Python',
         'What is a spreadsheet?', 'How do I create a Word document?', 'Explain how to write code',
         'Write a short reply about Python', 'Write an explanation of Python code', 'I used to write Python code', 'I do not want to create a document', 'Do not create a document', 'Can you explain this presentation?',
-        'Who is Virat Kohli?', 'What is a Word file?', 'How do I write an essay?', 'Explain environmental management', 'Please note that I read a report today']
+        'Who is Virat Kohli?', 'What is a Word file?', 'How do I write an essay?', 'Explain environmental management', 'Please note that I read a report today',
+        'How do I add three numbers in C++?', 'Show me an example of a Python function',
+        'How do I open VS Code and write C++ code?', 'Do not open VS Code and write a program', 'Open VS Code and explain what Python is']
 files = {'Write Python code for MyProject': 'vscode', 'Give me a Python script for hiking': 'vscode', 'Create a CSV for Budget': 'excel',
          'Draft a Word document about History': 'word', 'Create a presentation about Birds': 'ppt',
          'Design a poster for school': 'canva', 'Write notes about Meeting': 'notepad',
@@ -40,6 +42,14 @@ print('Brain: chat/default routing, explicit artifact intents, response schema a
 assert namespace["health"]() == {"service": "vidur-brain", "status": "ok"}
 
 cases = [
+    ("cpp", ".cpp", "open vs code and write a cpp code to add 3 no.s and take input from users"),
+    ("cpp", ".cpp", "Open VS Code and write a C++ program to add three numbers."),
+    ("python", ".py", "Open VS Code and write code to take input from the user."),
+    ("python", ".py", "Create a Python file for factorial."),
+    ("python", ".py", "Write this code in VS Code."),
+    ("cpp", ".cpp", "Create a file named BinarySearch.cpp."),
+    ("cpp", ".cpp", 'Create a file named "BinarySearch.cpp"'),
+    ("cpp", ".cpp", "Please open Visual Studio Code, then write a C++ program."),
     ("python", ".py", "Write a Python program to sort an array"),
     ("javascript", ".js", "Write a JavaScript function to reverse a string"),
     ("typescript", ".ts", "Write a TypeScript function for a total"),
