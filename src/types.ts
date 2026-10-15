@@ -7,9 +7,18 @@ export interface ModelInfo {
   configured: boolean;
 }
 export interface ConnectionStatus {
-  device: "disconnected" | "connected" | "unknown";
-  model: "unavailable" | "ready" | "unknown";
-  mode: ProviderMode;
+  state:
+    | "unknown"
+    | "mock"
+    | "adb-missing"
+    | "disconnected"
+    | "unauthorized"
+    | "device-unavailable"
+    | "forward-error"
+    | "brain-unavailable"
+    | "connected";
+  label: string;
+  detail: string;
 }
 export type ProviderMode = "mock" | "android";
 export interface InferenceRequest {
@@ -61,6 +70,9 @@ export interface Workspace {
   artifacts: Artifact[];
 }
 export interface DesktopAPI {
+  getDeviceStatus(): Promise<ConnectionStatus>;
+  refreshDeviceStatus(): Promise<ConnectionStatus>;
+  onDeviceStatus(callback: (status: ConnectionStatus) => void): () => void;
   getInferenceConfig(): Promise<{ provider: ProviderMode }>;
   generate(prompt: string): Promise<BrainResult>;
   load(): Promise<Workspace>;
