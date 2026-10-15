@@ -3,6 +3,16 @@ const path = require("node:path");
 
 // Exclusive creation also handles files created outside DAEMON and concurrent writers.
 async function writeArtifact(directory, artifact) {
+  // Generate and validate the entire binary before creating or registering a file.
+  const data =
+    path.extname(artifact.name) === ".pptx"
+      ? await require("./presentation.cjs").createPresentation(
+          artifact.content,
+          artifact.presentationStatus,
+        )
+      : path.extname(artifact.name) === ".docx"
+        ? await require("./document.cjs").createDocument(artifact.content)
+        : artifact.content;
   await fs.mkdir(directory, { recursive: true });
   const root = await fs.realpath(directory);
   const extension = path.extname(artifact.name);
@@ -17,7 +27,7 @@ async function writeArtifact(directory, artifact) {
       const folder = await fs.mkdtemp(path.join(root, `${stem}_`));
       const target = path.join(folder, artifact.name);
       try {
-        await fs.writeFile(target, artifact.content, {
+        await fs.writeFile(target, data, {
           flag: "wx",
           mode: 0o600,
         });
@@ -31,7 +41,7 @@ async function writeArtifact(directory, artifact) {
     if (existing.has(name.toLowerCase())) continue;
     const target = path.join(root, name);
     try {
-      await fs.writeFile(target, artifact.content, { flag: "wx", mode: 0o600 });
+      await fs.writeFile(target, data, { flag: "wx", mode: 0o600 });
       return { ...artifact, name, path: target };
     } catch (error) {
       if (error.code !== "EEXIST") throw error;
