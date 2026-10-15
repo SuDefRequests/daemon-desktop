@@ -82,8 +82,23 @@ async function managedPath(id) {
     throw new Error("File path rejected");
   return actual;
 }
+if (process.env.DAEMON_DEV === "1") {
+  if (!app.requestSingleInstanceLock()) {
+    console.error(
+      "DAEMON development window is already running. Close it before launching again.",
+    );
+    app.exit(1);
+  }
+  app.on("second-instance", () => {
+    win?.show();
+    win?.focus();
+  });
+}
 app.whenReady().then(async () => {
-  const mode = inference.providerMode(process.env.DAEMON_PROVIDER || "mock");
+  const mode = inference.providerMode(
+    process.env.DAEMON_PROVIDER ??
+      (process.env.DAEMON_DEV === "1" ? "android" : "mock"),
+  );
   let generating = false;
   handle("inference:config", () => ({ provider: mode }));
   handle("inference:generate", async (prompt) => {
@@ -197,7 +212,9 @@ app.whenReady().then(async () => {
     (_wc, _permission, callback) => callback(false),
   );
   if (process.env.DAEMON_DEV === "1")
-    await win.loadURL("http://127.0.0.1:5173");
+    await win.loadURL(
+      require("./dev-url.cjs").validateDevURL(process.env.DAEMON_DEV_URL),
+    );
   else await win.loadFile(path.join(__dirname, "../dist/index.html"));
 });
 app.on("window-all-closed", () => {

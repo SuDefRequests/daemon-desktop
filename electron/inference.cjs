@@ -3,6 +3,7 @@ const INFERENCE_TIMEOUT_MS = 600_000;
 const MAX_PROMPT_LENGTH = 12_000;
 const MAX_RESPONSE_BYTES = 2_100_000;
 const actions = new Set([
+  "chat",
   "automate_vscode",
   "automate_notepad",
   "automate_excel",
@@ -113,6 +114,7 @@ function isCSV(content) {
 }
 function convertResponse(response) {
   const { action, content } = validateResponse(response);
+  if (action === "chat") return { reply: content };
   if (action === "automate_canva")
     return {
       reply: `The brain returned a Canva search phrase:\n\n${content}\n\nCanva automation is not supported in this foundation. No file was created and no browser was opened.`,
