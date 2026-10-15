@@ -1,5 +1,12 @@
 const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("daemon", {
+  getDeviceStatus: () => ipcRenderer.invoke("device:status"),
+  refreshDeviceStatus: () => ipcRenderer.invoke("device:refresh"),
+  onDeviceStatus: (callback) => {
+    const listener = (_event, status) => callback(status);
+    ipcRenderer.on("device:status", listener);
+    return () => ipcRenderer.removeListener("device:status", listener);
+  },
   getInferenceConfig: () => ipcRenderer.invoke("inference:config"),
   generate: (prompt) => ipcRenderer.invoke("inference:generate", prompt),
   load: () => ipcRenderer.invoke("workspace:load"),
