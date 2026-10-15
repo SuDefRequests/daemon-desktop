@@ -1,5 +1,10 @@
 const assert = require("node:assert/strict");
-const { createArtifactOpener } = require("../electron/artifact-opener.cjs");
+const {
+  createArtifactOpener: makeOpener,
+} = require("../electron/artifact-opener.cjs");
+// Native process creation is stubbed; no Windows programs run on this host.
+const createArtifactOpener = (options) =>
+  makeOpener({ ...options, start: options.start || options.run });
 const { CODE_EXTENSIONS } = require("../electron/code-languages.cjs");
 const fileStat = async () => ({ isFile: () => true });
 const missing = () => Object.assign(new Error("not found"), { code: "ENOENT" });
@@ -54,11 +59,8 @@ const missing = () => Object.assign(new Error("not found"), { code: "ENOENT" });
       assert.deepEqual(args.slice(-3), ["--reuse-window", "--", target]);
       assert.equal(options.shell, false);
       assert.equal(options.env.NODE_OPTIONS, undefined);
-      if (platform === "win32") {
-        assert.ok(args[0].endsWith("resources\\app\\out\\cli.js"));
-        assert.equal(options.env.ELECTRON_RUN_AS_NODE, "1");
-        assert.notEqual(args[0], target);
-      } else assert.equal(options.env.ELECTRON_RUN_AS_NODE, undefined);
+      assert.deepEqual(args, ["--reuse-window", "--", target]);
+      assert.equal(options.env.ELECTRON_RUN_AS_NODE, undefined);
     }
     const count = calls.length;
     for (const target of [
@@ -148,7 +150,7 @@ const missing = () => Object.assign(new Error("not found"), { code: "ENOENT" });
     );
     assert.equal(attempts, 1);
   }
-  // Windows discovery uses PATH shims and registry, never cmd.exe or a shell.
+  // Standard installations use native launch; batch fallback is tested separately.
   let release, enter;
   const entered = new Promise((resolve) => {
     enter = resolve;
@@ -285,22 +287,100 @@ const missing = () => Object.assign(new Error("not found"), { code: "ENOENT" });
     if (mode === "launch-error") {
       await assert.rejects(
         opener.open(target),
-        /discovered.*launching failed: spawn Code.exe ENOENT/,
-      );
-    } else if (mode === "broken-cli") {
-      await assert.rejects(
-        opener.open(target),
-        /discovered.*launcher is missing/,
+        /could not start: spawn Code.exe ENOENT/,
       );
     } else {
       assert.equal((await opener.open(target)).status, "requested");
       const [command, args, options] = calls.at(-1);
       assert.equal(command, expected);
-      assert.deepEqual(args, [expectedCli, "--reuse-window", "--", target]);
+      assert.deepEqual(args, ["--reuse-window", "--", target]);
       assert.equal(options.shell, false);
-      assert.equal(options.env.ELECTRON_RUN_AS_NODE, "1");
+      assert.equal(options.env.ELECTRON_RUN_AS_NODE, undefined);
       assert.equal(calls.filter(([command]) => command === expected).length, 1);
     }
+  }
+  for (const mode of [
+    "shim-only",
+    "spawn-fallback",
+    "fallback-error",
+    "unsafe-path",
+  ]) {
+    const shim = win.join(root, "bin", "code.cmd");
+    const saved =
+      mode === "unsafe-path"
+        ? "C:\\Saved files\\bad & name.py"
+        : "C:\\Saved files\\find factorial.py";
+    const calls = [];
+    const opener = createArtifactOpener({
+      platform: "win32",
+      env: { DAEMON_VSCODE_PATH: shim },
+      realpath: async (p) => p,
+      stat: async (p) => ({
+        isFile: () =>
+          p === saved || p === shim || (mode === "spawn-fallback" && p === exe),
+      }),
+      start: async (command, args) => {
+        calls.push([command, args]);
+        throw Object.assign(new Error("direct access denied"), {
+          code: "EACCES",
+        });
+      },
+      run: async (command, args, options) => {
+        calls.push([command, args]);
+        assert.equal(command, "cmd.exe");
+        assert.deepEqual(args.slice(0, 4), ["/d", "/v:off", "/s", "/c"]);
+        assert.equal(
+          args[4],
+          '\"\"%DAEMON_EDITOR_LAUNCHER%\" --reuse-window -- \"%DAEMON_EDITOR_FILE%\"\"',
+        );
+        assert.equal(options.windowsVerbatimArguments, true);
+        assert.equal(options.env.DAEMON_EDITOR_LAUNCHER, shim);
+        assert.equal(options.env.DAEMON_EDITOR_FILE, saved);
+        assert.equal(options.env.ELECTRON_RUN_AS_NODE, undefined);
+        assert.equal(options.shell, false);
+        if (mode === "fallback-error")
+          throw new Error("batch launcher exited with code 1");
+        return { stdout: "" };
+      },
+    });
+    if (mode === "unsafe-path") {
+      await assert.rejects(opener.open(saved), /cannot safely handle/);
+      assert.equal(calls.length, 0);
+    } else if (mode === "fallback-error") {
+      await assert.rejects(
+        opener.open(saved),
+        /batch launcher exited with code 1/,
+      );
+    } else {
+      assert.equal((await opener.open(saved)).status, "requested");
+      assert.equal(calls.length, mode === "spawn-fallback" ? 2 : 1);
+    }
+  }
+  // Real spawn adapter resolves on process creation, without waiting for GUI exit.
+  const cp = require("node:child_process");
+  const originalSpawn = cp.spawn;
+  let unrefs = 0;
+  try {
+    cp.spawn = (command, args, options) => {
+      assert.equal(command, exe);
+      assert.deepEqual(args, ["--reuse-window", "--", target]);
+      assert.equal(options.detached, true);
+      assert.equal(options.shell, false);
+      assert.equal(options.env.ELECTRON_RUN_AS_NODE, undefined);
+      const child = new (require("node:events").EventEmitter)();
+      child.unref = () => unrefs++;
+      process.nextTick(() => child.emit("spawn"));
+      return child;
+    };
+    await makeOpener({
+      platform: "win32",
+      env: { DAEMON_VSCODE_PATH: exe },
+      realpath: async (p) => p,
+      stat: async (p) => ({ isFile: () => p === exe || p === target }),
+    }).open(target);
+    assert.equal(unrefs, 1);
+  } finally {
+    cp.spawn = originalSpawn;
   }
   console.log(
     "Artifact opening: Windows/Fedora associations, all code languages via VS Code, PATH/registry/configured discovery, separate arguments, invalid paths/types, missing apps, launch failures and bounded single attempts passed (mocked launch APIs).",
