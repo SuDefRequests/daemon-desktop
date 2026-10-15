@@ -392,32 +392,41 @@ export default function App() {
         prompt: content,
         task,
       });
-      let artifact: SavedArtifact | undefined;
-      if (result.file) {
-        artifact = await saveArtifact(
+      const savedArtifacts: SavedArtifact[] = [];
+      for (const file of result.files || (result.file ? [result.file] : [])) {
+        const stylesheet = savedArtifacts.find((a) => a.name.endsWith(".css"));
+        const artifact = await saveArtifact(
           {
             id: uid(),
             conversationId: id,
-            name: result.file.name,
-            kind: result.file.kind,
+            name: file.name,
+            kind: file.kind,
             source: provider.mode,
-            content: result.file.content,
-            ...(result.file.presentationStatus
-              ? { presentationStatus: result.file.presentationStatus }
+            content:
+              stylesheet && file.name.endsWith(".html")
+                ? file.content.replace('href="styles.css"', `href="${stylesheet.name}"`)
+                : file.content,
+            ...(file.presentationStatus
+              ? { presentationStatus: file.presentationStatus }
               : {}),
             createdAt: new Date().toISOString(),
           },
           dataRef.current.artifacts,
         );
+        savedArtifacts.push(artifact);
+        if (result.files)
+          await commit({
+            ...dataRef.current,
+            artifacts: [artifact, ...dataRef.current.artifacts],
+          });
       }
+      const artifact = savedArtifacts.at(-1);
       const current = dataRef.current;
       const assistantMessageId = uid();
       animatedMessages.current.add(assistantMessageId);
       const persisted = await commit({
         ...current,
-        artifacts: artifact
-          ? [artifact, ...current.artifacts]
-          : current.artifacts,
+        artifacts: artifact && !result.files ? [artifact, ...current.artifacts] : current.artifacts,
         conversations: current.conversations.map((c) =>
           c.id === id
             ? {
@@ -432,13 +441,21 @@ export default function App() {
                     content: result.reply,
                     createdAt: new Date().toISOString(),
                     artifactId: artifact?.id,
+                    artifactIds: savedArtifacts.map((a) => a.id),
                   },
                 ],
               }
             : c,
         ),
       });
-      if (artifact && persisted)
+      if (savedArtifacts.length > 1 && persisted)
+        notify(
+          `Saved ${savedArtifacts.map((a) => a.name).join(" and ")}. ${savedArtifacts
+            .filter((a) => a.opening?.status === "failed")
+            .map((a) => `${a.name}: ${a.opening?.message}`).join(" ")}`,
+          savedArtifacts.some((a) => a.opening?.status === "failed"),
+        );
+      else if (artifact && persisted)
         notify(
           window.daemon
             ? `Saved ${artifact.name}. ${artifact.opening?.status === "failed" ? `Automatic opening failed: ${artifact.opening.message} Use the file actions to try again.` : artifact.opening?.message || ""}`
@@ -974,13 +991,12 @@ export default function App() {
                           </time>
                         </div>
                         <p>{m.content}</p>
-                        {m.artifactId &&
-                          (() => {
+                        {(m.artifactIds || (m.artifactId ? [m.artifactId] : [])).map((artifactId) => {
                             const a = data.artifacts.find(
-                              (a) => a.id === m.artifactId,
+                              (a) => a.id === artifactId,
                             );
                             return a ? (
-                              <div className="artifact-inline">
+                              <div className="artifact-inline" key={a.id}>
                                 <FileText size={22} />
                                 <div>
                                   <strong>{a.name}</strong>
@@ -995,7 +1011,7 @@ export default function App() {
                                 </div>
                               </div>
                             ) : null;
-                          })()}
+                          })}
                       </div>
                     </article>
                   ))}
