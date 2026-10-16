@@ -1,6 +1,6 @@
 # DAEMON Desktop
 
-Electron + React + TypeScript + Vite + Tailwind CSS + Lucide. A desktop integration foundation based on the supplied reference, with Android inference by default in desktop development and an explicit mock option.
+Electron + React + TypeScript + Vite + Tailwind CSS + Lucide. A desktop integration foundation based on the supplied reference, with Android inference by default in Electron and an explicit mock option.
 
 ```bash
 cd /home/suraj_null/daemon-desktop
@@ -54,7 +54,7 @@ The composer offers Qwen2.5 0.5B — Local and DAEMON Compact — Demo option. T
 
 `brain/daemon_brain_v4.py` is the phone-side Flask brain. Deploy this updated copy to Android and restart it; the legacy desktop Python UI is unchanged. The intended deployment runs the brain on Android port 5000 and llama-server on that same phone's localhost port 8080. In Android mode, Electron discovers ADB from `DAEMON_ADB_PATH`, `ANDROID_HOME`, `ANDROID_SDK_ROOT`, the standard SDK location, or PATH. It uses bounded `execFile` calls (no shell) to inspect devices and establish `adb -s <serial> forward --no-rebind tcp:5000 tcp:5000` only when authorized. Existing rules are verified and never replaced. With multiple authorized devices, set `ANDROID_SERIAL`; no device is guessed. Python and remote Android processes are never launched automatically.
 
-Provider selection is fixed for an Electron session by `DAEMON_PROVIDER=mock` or `DAEMON_PROVIDER=android`. Desktop development defaults to Android; compiled launches retain mock as their default. Unsupported values are rejected. Browser preview always uses mock mode. Restart Electron with mock mode when the phone is unavailable; real failures never silently substitute a mock response.
+Provider selection is fixed for an Electron session by `DAEMON_PROVIDER=mock` or `DAEMON_PROVIDER=android`. Development, compiled and installed Electron launches default to Android. Unsupported values are rejected. Browser preview always uses mock mode. Restart Electron with mock mode when the phone is unavailable; real failures never silently substitute a mock response.
 
 ```bash
 # Fedora: Android is the development default
@@ -105,6 +105,8 @@ The `chat` response uses `{ "action": "chat", "content": "...", "filename": "" }
 Returned `filename` is validated as a field but never used as a path or authoritative format. `automate_vscode` preserves its validated language extension; `automate_excel` must be consistent CSV and becomes `.csv`; `automate_notepad` becomes Markdown or plain text. `automate_word` creates genuine `.docx` through the local `docx` library, and `automate_ppt` creates genuine `.pptx` through PptxGenJS. Both ZIP/OOXML packages are checked before disk saving and registration. Original model text stays available in Preview. Explicit Word requests and essays/reports requested in a document format route to Word; essays without a file request remain chat; ordinary questions remain chat. No generic essay or presentation is substituted for model content. CSV, malformed output and inference failures are validated before creating artifacts. Canva returns an explanation and search phrase without creating a file or opening a browser. Source code is never executed. Spreadsheet generation remains CSV; XLSX and PDF generation are not implemented by this change. Mock document/presentation samples remain explicitly labelled Markdown examples.
 
 ## Verification
+
+For Windows synchronization, installer builds, targeted file-lock diagnostics and installed-app ADB setup, see [Windows packaging](docs/windows-packaging.md). Fedora validation does not verify a Windows installer or physical Android inference.
 
 Tests start their own isolated Vite servers; no separate dev server is required:
 
