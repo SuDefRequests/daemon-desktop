@@ -126,8 +126,7 @@ if (process.env.DAEMON_DEV === "1") {
 }
 app.whenReady().then(async () => {
   const mode = inference.providerMode(
-    process.env.DAEMON_PROVIDER ??
-      (process.env.DAEMON_DEV === "1" ? "android" : "mock"),
+    process.env.DAEMON_PROVIDER ?? "android",
   );
   deviceMonitor = require("./device.cjs").createDeviceMonitor({
     mode,

@@ -11,7 +11,7 @@
     "electron:dev": "node scripts/electron-dev.mjs",
     "electron:start": "electron .",
     "dist": "npm run build && electron-builder --win nsis",
-    "test": "node tests/device.cjs && node tests/startup.mjs && node tests/inference.cjs && node tests/artifact-files.cjs && node tests/presentation.cjs && node tests/document.cjs && node tests/artifact-opener.cjs && node tests/prototype.mjs",
+    "test": "node tests/packaging.cjs && node tests/device.cjs && node tests/startup.mjs && node tests/inference.cjs && node tests/artifact-files.cjs && node tests/presentation.cjs && node tests/document.cjs && node tests/artifact-opener.cjs && node tests/prototype.mjs",
     "test:android": "node tests/android.mjs"
   },
   "dependencies": {
@@ -37,6 +37,7 @@
   "build": {
     "appId": "com.vidur.desktop",
     "productName": "VIDUR AI",
+    "forceCodeSigning": false,
     "directories": {
       "output": "release"
     },
