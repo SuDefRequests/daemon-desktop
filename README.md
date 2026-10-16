@@ -1,130 +1,174 @@
-# DAEMON Desktop
+VIDUR AI
+A local-first AI desktop application powered by your own device.
+VIDUR AI is an Electron + React + TypeScript desktop app that connects to a locally hosted AI brain on an Android device. It brings chat, code generation, and document creation into one desktop workspace—without silently switching to mock responses when the real provider is unavailable.
+Download VIDUR AI for Windows · Releases · Report an issue
+Latest release: VIDUR AI v0.1.0
+Windows installer: VIDUR.AI.Setup.0.1.0.exe
 
-Electron + React + TypeScript + Vite + Tailwind CSS + Lucide. A desktop integration foundation based on the supplied reference, with Android inference by default in Electron and an explicit mock option.
+Features
+Local AI workflow
+- Connects to the VIDUR brain service running on your Android device.
+- Uses ADB to discover devices and forward the brain service to the desktop.
+- Reports useful connection states, including missing ADB, no device, authorization issues, forwarding errors, and unavailable brain services.
+- Uses Android mode by default in Electron builds.
+- Offers an explicit mock provider for development and UI testing; real-provider failures do not silently fall back to mock answers.
+Chat and workspace
+- Conversation history with chat selection, search, rename, and deletion confirmation.
+- File library for generated artifacts, with previews and file actions.
+- Persistent history and generated files in the desktop app.
+- Browser preview mode for UI development; browser storage is separate from Electron storage.
+Code and file generation
+- Generates source-code files and can open them in VS Code.
+- Creates genuine .docx Word documents and .pptx PowerPoint presentations from model-provided content.
+- Supports Markdown/text and CSV artifacts.
+- Uses readable task-based filenames and avoids overwriting existing files by adding collision suffixes.
+- Includes preview, open, and show-in-folder actions where supported by the platform.
+Desktop integration and safeguards
+- Electron context isolation with a narrow preload API.
+- Validated IPC and a fixed local inference endpoint; the renderer cannot choose an arbitrary request URL.
+- Bounded request/response handling and timeouts.
+- Generated source code is saved as a file, not executed by VIDUR.
+- Reduced-motion support for interface animations.
+Download and install
+Windows
+1. Open the VIDUR AI v0.1.0 release page.
+2. Download VIDUR.AI.Setup.0.1.0.exe from Assets.
+3. Run the installer and follow the prompts.
+Requirements for Android-backed inference
+- Windows 10/11, 64-bit.
+- Android Platform Tools (ADB) installed and discoverable by VIDUR.
+- An authorized Android device connected over USB or otherwise available to ADB.
+- The VIDUR brain service and a compatible local model server running on the phone.
+If no Android device is connected, VIDUR should report the appropriate ADB/device status. It does not mean the app is using a real model until the Android service is connected and requests succeed.
+Early-release note: Windows may show a security warning because this build may not have a trusted publisher signature. Only install software you trust, and download VIDUR from this repository's official release page.
 
-```bash
-cd /home/suraj_null/daemon-desktop
-npm install
-npm run dev           # browser at http://127.0.0.1:5173
-```
-
-Desktop development starts its own Vite server, selecting the next available port when 5173 is occupied. Electron receives that exact URL; no existing processes are terminated:
-
-```bash
-npm run electron:dev  # starts Vite, waits for readiness, launches Electron
-```
-
-For a compiled desktop launch:
-
-```bash
-npm run build
-npm run electron:start
-```
-
-## Structure
-
-- `src/App.tsx`: homepage, conversations, file library, device and settings views.
-- `src/types.ts`: typed messages, conversations, artifacts, connection, model and desktop API.
-- `src/inference.ts`: typed provider selection and restricted desktop adapter.
-- `src/mock.ts`: retained, explicitly simulated inference provider.
-- `src/preferences.ts`: session-only model and thinking demonstrations.
-- `src/storage.ts`: Electron persistence and browser fallback.
-- `electron/main.cjs`: validated IPC, local history, atomic writes, file saving and OS actions.
-- `electron/preload.cjs`: narrow named methods; no raw IPC, filesystem or shell access.
-- `electron/inference.cjs`: fixed-endpoint HTTP connector, validation, timeout and safe content conversion.
-- `public/daemon-logo.svg`: replaceable logo independent of layout.
-
-## Functionality and limits
-
-History starts empty. Sending a prompt creates a conversation. Chats can be selected, searched, renamed and deleted with confirmation. Deleting a chat retains its artifacts. Mock generation creates actual Python, Markdown or CSV content, with previews and downloads. Presentation output is a Markdown outline, not a PPTX; document output is Markdown, not DOCX. All samples are fixed mock examples and do not claim to fulfill arbitrary prompts or run Qwen.
-
-In Electron, history lives in the platform application data directory. Files default to `Documents/DAEMON`, or `DAEMON_SAVE_DIR` if set before launch. Choose another directory in Settings; prior files keep their paths. Each newly saved and registered artifact sends one automatic open request. Documents, presentations and text use the system association; all eleven source-code formats open in VS Code, never through an association that could execute them. File-type-specific manual Open actions, Preview and Show in folder remain available. Opening failures are reported separately from saving failures and do not regenerate or delete the saved file. Retrying the same artifact ID does not save or automatically open it again. No artifact deletion action is exposed in the UI.
-
-For VS Code, Windows discovery checks PATH (`Code.exe`/`code.cmd`) and the user/machine App Paths registry entries. VIDUR AI invokes VS Code's bundled CLI with a separate file argument, without executing a batch file or constructing a shell command. Fedora/Linux uses the installed `code` launcher on PATH. For a custom installation location, set `DAEMON_VSCODE_PATH` before starting Electron: the absolute path to `Code.exe` on Windows or the installed `code` launcher on Linux. This is a path, not a shell command or an argument string. Install a suitable default Word/PowerPoint/text application separately. An accepted open request does not verify that the application displayed the document.
-
-In browser preview, history and artifact contents persist in local storage for that origin. Download saves a copy through the browser. Directory selection and OS file actions are unavailable. Browser data and Electron data are separate. Storage failures and malformed saved history show errors; failed history loading prevents overwriting the original data.
-
-Artifact names derive from the task brief, for example `hiking_planner.py`, `meeting_notes.md` and `monthly_budget.csv`. IDs stay in metadata. New disk files use those actual names, with `_2`, `_3` suffixes on collisions; exclusive creation preserves files created by DAEMON or other applications. Existing artifacts from the earlier UUID-prefixed storage format are preserved in place, displayed by their real disk filename, and remain available through file actions. Browser downloads use the library filename; the browser controls the final downloaded location and any download-folder collision handling.
-
-Interaction motion uses CSS only: new-message appearances, menu entry/exit, view fades, artifact feedback, button states and success/error notices. Reduced motion suppresses movement and continuous loading animation. The mock provider retains its explicit one-second simulated generation delay; animations add no inference delay. File success feedback waits for workspace persistence, and generation indicators clear on success and failure.
-
-The composer offers Qwen2.5 0.5B — Local and DAEMON Compact — Demo option. These selections and Low/Middle/Extended thinking modes are UI preferences for the current session. They change labels only, are not sent to Python, and do not change the provider or loaded model. A reload resets the preferences. No model detection, downloading or switching is implemented.
-
-## Existing Python integration
-
-`brain/daemon_brain_v4.py` is the phone-side Flask brain. Deploy this updated copy to Android and restart it; the legacy desktop Python UI is unchanged. The intended deployment runs the brain on Android port 5000 and llama-server on that same phone's localhost port 8080. In Android mode, Electron discovers ADB from `DAEMON_ADB_PATH`, `ANDROID_HOME`, `ANDROID_SDK_ROOT`, the standard SDK location, or PATH. It uses bounded `execFile` calls (no shell) to inspect devices and establish `adb -s <serial> forward --no-rebind tcp:5000 tcp:5000` only when authorized. Existing rules are verified and never replaced. With multiple authorized devices, set `ANDROID_SERIAL`; no device is guessed. Python and remote Android processes are never launched automatically.
-
-Provider selection is fixed for an Electron session by `DAEMON_PROVIDER=mock` or `DAEMON_PROVIDER=android`. Development, compiled and installed Electron launches default to Android. Unsupported values are rejected. Browser preview always uses mock mode. Restart Electron with mock mode when the phone is unavailable; real failures never silently substitute a mock response.
-
-```bash
-# Fedora: Android is the development default
-npm run electron:dev
-# Explicit mock development:
-DAEMON_PROVIDER=mock npm run electron:dev
-# Or, after a build:
-DAEMON_PROVIDER=android npm run electron:start
-```
-
-```powershell
-# Windows PowerShell:
-npm run electron:dev  # Android by default
-# To return to mock mode before the next launch:
-$env:DAEMON_PROVIDER = "mock"
-```
-
-The boundary is React `InferenceProvider` → preload `generate(prompt)` → validated `inference:generate` IPC → main-process HTTP `POST http://127.0.0.1:5000/process` with only `{ "prompt": "..." }`. The renderer cannot supply a URL. Redirects are rejected. Prompt length is capped at 12,000 characters; the response body is capped at 2.1 MB and content at 2 million characters. The 600-second desktop timeout (longer than the brain’s 240-second llama-server request timeout) covers connection and body reading. HTTP errors, malformed JSON, missing fields, unsupported actions, empty content and `Error:` payloads are rejected. Only one real request per window is allowed at a time, and the lock/loading state clears on failures.
-
-Device status is shared by the header, sidebar and homepage footer. One main-process monitor checks at startup and every 10 seconds after the preceding check completes; identical snapshots are not rebroadcast. Device & model offers a manual refresh. Mock/browser mode performs no ADB or service checks. The status distinguishes missing ADB, no device, authorization, unavailable/offline devices, ambiguous selection, forwarding errors and unavailable brain services.
-
-Deploy the updated `brain/daemon_brain_v4.py` and restart Flask. Its new lightweight `GET /health` returns `{ "service": "vidur-brain", "status": "ok" }` without running inference. Only an authorized device, verified forwarding and this validated response produce “Connected”. An older brain without the health route stays “Brain service unavailable” until updated. Health checks are bounded to 3 seconds and 4 KB. This verifies the Flask service, not model loading or successful Qwen generation. The model name is an expected configuration, not detection. The brain receives individual prompts, not chat history or the UI's task preference.
-
-To deploy this checkout from the Windows repository directory (one authorized phone):
-
-```powershell
+How it works
+At a high level, the desktop app sends a prompt through the Electron preload/IPC boundary to the main process, which makes a request to the local forwarded brain endpoint:
+VIDUR UI
+   │
+   ▼
+Inference provider
+   │
+   ▼
+Electron preload → validated IPC → Electron main process
+   │
+   ▼
+http://127.0.0.1:5000/process
+   │
+   ▼
+ADB port forwarding
+   │
+   ▼
+VIDUR brain on Android → local model server
+The desktop sends the individual prompt to the brain service; the UI's conversation history and model/thinking preference labels are not automatically sent as model context. The health endpoint checks the brain service, not whether the model is loaded or capable of completing inference.
+Provider behavior
+- Electron: Android is the default provider.
+- Mock mode: explicitly selected for development/testing.
+- Browser preview: uses mock mode because browser preview cannot perform the desktop's ADB and operating-system actions.
+- No silent fallback: when Android inference fails, VIDUR reports the failure instead of presenting a mock response as real inference.
+Android brain setup
+The repository includes brain/daemon_brain_v4.py, a Flask service intended to run on the Android device. The expected setup is:
+- Brain service on Android port 5000.
+- Local model server on the phone's localhost port 8080.
+- ADB forwarding from desktop port 5000 to device port 5000.
+VIDUR looks for ADB through DAEMON_ADB_PATH, ANDROID_HOME, ANDROID_SDK_ROOT, the standard SDK location, or PATH. With multiple authorized devices, set ANDROID_SERIAL to select the intended device. VIDUR does not guess between multiple devices.
+The brain exposes GET /health for a lightweight service health check. A healthy response confirms that the Flask service is responding; it does not confirm model loading or successful generation.
+Check ADB on Windows
+Open PowerShell and run:
+adb devices -l
+If adb is not recognized, install Android Platform Tools or add its directory to PATH. You can also point VIDUR directly to the executable before launching it:
+$env:DAEMON_ADB_PATH = (Get-Command adb.exe -ErrorAction Stop).Source
+If the phone appears as unauthorized, unlock it and accept the USB debugging authorization prompt on the phone.
+Update the brain script
+From the repository directory, with one authorized device connected:
 adb push .\brain\daemon_brain_v4.py /sdcard/Download/daemon_brain_v4.py
-```
-
-In the phone terminal currently running Flask, stop **that brain process** with Ctrl+C
-(leave llama-server running). In the same Python environment, run:
-
-```sh
+Stop the currently running Flask brain process on the phone (leave the model server running), then start the updated script in the phone's Python environment:
 python /sdcard/Download/daemon_brain_v4.py
-```
+If using Termux, grant shared-storage access with termux-setup-storage if needed. Do not run two brain services on port 5000.
+Development
+Requirements
+- Node.js and npm.
+- Git.
+- For Android integration tests or real inference: Android Platform Tools and an authorized Android device.
+- Python for the brain checks and the Android-side Flask service.
+Install dependencies
+git clone https://github.com/SuDefRequests/daemon-desktop.git
+cd daemon-desktop
+npm ci
+Run the app
+Run the web UI in a browser:
+npm run dev
+Run the Electron desktop app (Android provider by default):
+npm run electron:dev
+Run Electron with the explicit mock provider:
+# Linux/macOS
+DAEMON_PROVIDER=mock npm run electron:dev
+# Windows PowerShell
+$env:DAEMON_PROVIDER = "mock"
+npm run electron:dev
+Build the production frontend:
+npm run build
+Launch the compiled Electron app:
+npm run electron:start
+Windows installer build
+npm ci
+npm run dist
+The installer is written to release/. For packaging troubleshooting, see [`docs/windows-packaging.md`](docs/windows-packaging.md).
+Tests
+Run the main test suite:
+npm test
+Android provider tests use fixtures and mocked HTTP responses; they do not require a physical phone request:
+npm run test:android
+Brain routing/schema checks:
+# Linux/macOS
+python3 tests/brain.py
+# Windows
+py -3 tests/brain.py
+If the browser integration tests report that Playwright Chromium is missing, install it:
+npx playwright install chromium
+Important: Passing automated tests does not establish that physical Android inference works. End-to-end validation still requires an authorized phone, ADB forwarding, the updated brain service, and the local model server.
+Configuration
+Variable	Purpose
+DAEMON_PROVIDER=android	Select the Android provider explicitly.
+DAEMON_PROVIDER=mock	Select mock mode explicitly for development/testing.
+DAEMON_ADB_PATH	Absolute path to adb/adb.exe when it is not discoverable automatically.
+ANDROID_HOME	Android SDK directory.
+ANDROID_SDK_ROOT	Alternative Android SDK directory.
+ANDROID_SERIAL	Select a specific authorized device when multiple devices are connected.
+DAEMON_SAVE_DIR	Override the default artifact output directory before launching Electron.
+DAEMON_VSCODE_PATH	Absolute path to the VS Code launcher for a custom installation.
 
-For Termux, grant shared-storage access with `termux-setup-storage` first if needed.
-If using a service manager instead of a foreground terminal, stop that brain service
-before running the updated copy; do not run two Flask instances on port 5000.
-Restart the updated desktop app from a fresh terminal so it inherits current PATH.
-Retry `write essay in word about formula 1`: the phone console must show
-`[VIDUR AI] Routed intent: word`. The response action is `automate_word`, and the
-desktop should show a saved DOCX artifact. A health check alone does not establish
-that the updated routing code is deployed or that model inference works.
 
-The `chat` response uses `{ "action": "chat", "content": "...", "filename": "" }` and produces only an assistant message, never a file. Explicit creation requests retain artifact actions; ordinary questions default to chat, and the original prompt case reaches Qwen.
-
-Returned `filename` is validated as a field but never used as a path or authoritative format. `automate_vscode` preserves its validated language extension; `automate_excel` must be consistent CSV and becomes `.csv`; `automate_notepad` becomes Markdown or plain text. `automate_word` creates genuine `.docx` through the local `docx` library, and `automate_ppt` creates genuine `.pptx` through PptxGenJS. Both ZIP/OOXML packages are checked before disk saving and registration. Original model text stays available in Preview. Explicit Word requests and essays/reports requested in a document format route to Word; essays without a file request remain chat; ordinary questions remain chat. No generic essay or presentation is substituted for model content. CSV, malformed output and inference failures are validated before creating artifacts. Canva returns an explanation and search phrase without creating a file or opening a browser. Source code is never executed. Spreadsheet generation remains CSV; XLSX and PDF generation are not implemented by this change. Mock document/presentation samples remain explicitly labelled Markdown examples.
-
-## Verification
-
-For Windows synchronization, installer builds, targeted file-lock diagnostics and installed-app ADB setup, see [Windows packaging](docs/windows-packaging.md). Fedora validation does not verify a Windows installer or physical Android inference.
-
-Tests start their own isolated Vite servers; no separate dev server is required:
-
-```bash
-npm test                       # browser integration checks
-TEST_ELECTRON=1 npm test        # desktop checks; needs a graphical session
-python tests/brain.py           # dependency-free brain routing/schema checks
-node tests/artifact-files.cjs   # filesystem collision/concurrent writer checks
-npm run test:android           # Android mode with main-process HTTP fixtures; no phone request
-```
-
-`npm test` includes device/forwarding, port-selection, connector and filesystem tests before the existing browser workflow checks. Electron tests use isolated temporary profiles/output directories. Coverage includes both providers, session-only model/thinking selections, prompt-only requests, all returned actions, JSON/HTTP/application/network errors, actual connection/body timeout aborts, bounded responses, loading cleanup, artifact preview/download, history after reload, rename, chat switching, deletion confirmation, retained files and restricted IPC. Screenshots go to `test-results/`.
-
-Android-provider UI tests intercept HTTP in the main process. They exercise the real provider and IPC but do not establish physical phone inference. USB authorization, ADB discovery/forwarding on Windows, the deployed health route, phone services/model loading and an actual end-to-end request still require the Windows laptop and Android device.
-
-Verified: production build, browser workflow checks and Electron workflow checks pass. Desktop tests verify all four files on disk and configurable output directories. Open-file and show-in-folder dispatch are verified with stubbed OS handlers, avoiding external application launches. The separate `electron:dev` command was also launched on Fedora, including occupied-port fallback and rejection of a duplicate development window. Automated tests use isolated Vite URLs. Windows startup and physical inference require manual verification.
-
-Fedora desktop was used for development. Windows source support uses Electron's portable path/dialog/shell APIs; Windows has not yet been tested. This foundation has no installer/package workflow.
-
-The preload and renderer follow Electron's [context isolation guidance](https://www.electronjs.org/docs/latest/tutorial/context-isolation); Tailwind uses the [Vite integration](https://tailwindcss.com/docs/installation/using-vite).
-# daemon-desktop
+Provider selection is fixed for an Electron session. Restart the app after changing provider environment variables.
+Current limitations
+- The model/thinking selectors are session-level UI preferences; they do not download, detect, or switch models.
+- Chat history is not automatically sent to the brain as conversational context; requests contain the individual prompt.
+- The health check verifies the brain service, not model availability or inference quality.
+- Spreadsheet artifacts are CSV; XLSX and PDF generation are not implemented.
+- Canva requests return an explanation/search phrase rather than generating a Canva project.
+- Browser preview does not provide ADB integration, native file opening, or desktop directory selection.
+- The Windows release is an early build; Windows Smart App Control or other security features may display warnings if the executable lacks a trusted publisher signature.
+Project structure
+daemon-desktop/
+├── src/                    # React UI, inference provider, storage and types
+├── electron/
+│   ├── main.cjs             # Main process, IPC, persistence and OS actions
+│   ├── preload.cjs          # Restricted renderer bridge
+│   └── inference.cjs        # Validated local inference connector
+├── brain/
+│   └── daemon_brain_v4.py   # Android-side Flask brain
+├── tests/                   # Packaging, provider, artifact and workflow tests
+├── docs/
+│   └── windows-packaging.md # Windows packaging and diagnostics
+└── package.json
+Security notes
+- The renderer does not receive raw IPC, filesystem, or shell access.
+- The inference endpoint is fixed in the Electron main process; redirects are rejected.
+- Request and response sizes are bounded, and errors/timeouts are surfaced.
+- Generated code is not executed by VIDUR.
+- Keep Android USB debugging enabled only when you need it, and authorize only devices you trust.
+Contributing and issues
+Bug reports, feature requests, and contributions are welcome. Please include your operating system, VIDUR version, steps to reproduce, and relevant logs—do not include private prompts, credentials, or other sensitive information.
+- Open an issue
+- Browse releases
+VIDUR AI — local-first AI, connected to your own device.
