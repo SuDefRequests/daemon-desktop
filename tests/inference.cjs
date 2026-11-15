@@ -7,6 +7,7 @@ const {
   INFERENCE_TIMEOUT_MS,
   MAX_PROMPT_LENGTH,
 } = require("../electron/inference.cjs");
+const { buildChatRequest } = require("../electron/edge-llm.cjs");
 const payload = (action, content) => ({
   action,
   content,
@@ -241,9 +242,14 @@ const json = (data) =>
   });
   assert.equal(result.file.extension, ".py");
   assert.equal(request.url, ENDPOINT);
+  assert.equal(
+    ENDPOINT,
+    "http://127.0.0.1:8080/v1/chat/completions",
+  );
   assert.equal(request.options.method, "POST");
   assert.equal(request.options.redirect, "error");
-  assert.deepEqual(JSON.parse(request.options.body), { prompt: "Write code" });
+  assert.equal(request.options.headers.Authorization, "Bearer local-brain");
+  assert.deepEqual(JSON.parse(request.options.body), buildChatRequest("Write code"));
   for (const prompt of [
     "",
     " ",

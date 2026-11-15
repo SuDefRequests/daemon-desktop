@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld("daemon", {
     return () => ipcRenderer.removeListener("device:status", listener);
   },
   getInferenceConfig: () => ipcRenderer.invoke("inference:config"),
+  setLlmEndpoint: (endpoint) => ipcRenderer.invoke("inference:endpoint", endpoint),
   generate: (prompt) => ipcRenderer.invoke("inference:generate", prompt),
   load: () => ipcRenderer.invoke("workspace:load"),
   save: (data) => ipcRenderer.invoke("workspace:save", data),

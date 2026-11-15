@@ -3,7 +3,15 @@ const {
   presentationSlides,
   presentationStatus,
 } = require("./presentation.cjs");
-const ENDPOINT = "http://127.0.0.1:5000/process";
+const {
+  API_KEY,
+  DEFAULT_ENDPOINT,
+  buildChatRequest,
+  extractAssistantText,
+  parseModelAction,
+} = require("./edge-llm.cjs");
+const { actionDispatcher } = require("./action-dispatcher.cjs");
+const ENDPOINT = DEFAULT_ENDPOINT;
 const INFERENCE_TIMEOUT_MS = 600_000;
 const MAX_PROMPT_LENGTH = 12_000;
 const MAX_RESPONSE_BYTES = 2_100_000;
@@ -267,22 +275,23 @@ function convertResponse(response) {
   };
 }
 
-async function generate(
-  prompt,
-  { fetchImpl = globalThis.fetch, timeoutMs = INFERENCE_TIMEOUT_MS } = {},
-) {
+async function generate(prompt, options = {}) {
+  const fetchImpl = options.fetchImpl || globalThis.fetch;
+  const timeoutMs = options.timeoutMs ?? INFERENCE_TIMEOUT_MS;
   const valid = validatePrompt(prompt);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   let reader, response;
   try {
-    response = await fetchImpl(ENDPOINT, {
+    const endpoint = options.endpoint || ENDPOINT;
+    response = await fetchImpl(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
+        Authorization: `Bearer ${API_KEY}`,
       },
-      body: JSON.stringify({ prompt: valid }),
+      body: JSON.stringify(buildChatRequest(valid)),
       signal: controller.signal,
       redirect: "error",
     });
@@ -314,6 +323,18 @@ async function generate(
     } catch {
       throw new Error("Android brain returned malformed JSON.");
     }
+    if (parsed && Array.isArray(parsed.choices)) {
+      const action = parseModelAction(extractAssistantText(parsed));
+      return actionDispatcher(action, {
+        workspace: options.workspaceRoot,
+        openFile: options.openFile,
+      });
+    }
+    if (parsed?.error)
+      throw new Error(
+        `Edge LLM: ${parsed.error.message || "request failed."}`.slice(0, 500),
+      );
+    // Legacy Flask brain payloads still convert for existing fixtures.
     return convertResponse(parsed);
   } catch (error) {
     if (
@@ -326,7 +347,9 @@ async function generate(
       );
     if (error instanceof TypeError || error.name === "TypeError")
       throw new Error(
-        "Cannot reach the Android brain. Check USB authorization, ADB forwarding and the phone services.",
+        "Cannot reach the edge LLM at " +
+          (options.endpoint || ENDPOINT) +
+          ". Check USB debugging, adb forward tcp:8080 tcp:8080, and that llama-server is running.",
       );
     throw error;
   } finally {

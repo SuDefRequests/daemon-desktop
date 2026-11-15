@@ -35,11 +35,11 @@ function fixture(options = {}) {
         "phone",
         "forward",
         "--no-rebind",
-        "tcp:5000",
-        "tcp:5000",
+        "tcp:8080",
+        "tcp:8080",
       ]);
       if (state.forwardFails) throw new Error("port in use");
-      if (!state.unverifiedForward) state.rules = "phone tcp:5000 tcp:5000";
+      if (!state.unverifiedForward) state.rules = "phone tcp:8080 tcp:8080";
       return { stdout: "" };
     },
     fetchImpl: async (url, config) => {
@@ -69,13 +69,13 @@ function fixture(options = {}) {
     [{ missing: true }, "adb-missing"],
     [{ adbError: true }, "unknown"],
     [{ devices: "phone device\nother device" }, "unknown"],
-    [{ rules: "other tcp:5000 tcp:5000" }, "forward-error"],
-    [{ rules: "phone tcp:5000 tcp:8080" }, "forward-error"],
+    [{ rules: "other tcp:8080 tcp:8080" }, "forward-error"],
+    [{ rules: "phone tcp:8080 tcp:5000" }, "forward-error"],
     [{ forwardFails: true }, "forward-error"],
     [{ unverifiedForward: true }, "forward-error"],
     [{ health: false }, "brain-unavailable"],
     [{ stalled: true }, "brain-unavailable"],
-    [{ response: () => reply({ status: "ok" }) }, "brain-unavailable"],
+    [{ response: () => reply({ status: "ok" }) }, "connected"],
     [
       {
         response: () =>

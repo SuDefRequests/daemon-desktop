@@ -1,0 +1,205 @@
+// Compact prompt for Qwen2.5-Coder-1.5B on a phone CPU. Keep this short:
+// the whole instruction is well under 350 tokens so prefill stays fast.
+const SYSTEM_PROMPT = [
+  "You control a desktop assistant. Return one JSON object and nothing else.",
+  '{"action":"chat","reply":"text"}',
+  '{"action":"code","filename":"name.ext","content":"full source"}',
+  '{"action":"ppt","title":"deck","slides":[{"heading":"title","bullets":["point"]}],"reply":"short note"}',
+  '{"action":"essay","title":"doc","content":"full text","reply":"short note"}',
+  "Use code for programs, ppt for slide decks, essay for essays or documents, otherwise chat.",
+  "Escape quotes and newlines inside strings. No markdown fences.",
+].join("\n");
+
+const DEFAULT_ENDPOINT = "http://127.0.0.1:8080/v1/chat/completions";
+const API_KEY = "local-brain";
+const MODEL = "Qwen2.5-Coder-1.5B-Instruct";
+
+function isPrivateHost(hostname) {
+  if (hostname === "localhost" || hostname === "127.0.0.1") return true;
+  const match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(hostname);
+  if (!match) return false;
+  const octets = match.slice(1).map(Number);
+  if (octets.some((octet) => octet > 255)) return false;
+  const [a, b] = octets;
+  return (
+    a === 10 ||
+    a === 127 ||
+    (a === 192 && b === 168) ||
+    (a === 172 && b >= 16 && b <= 31)
+  );
+}
+
+function validateEndpoint(value) {
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error("Edge LLM endpoint must be an http URL.");
+  }
+  if (url.protocol !== "http:")
+    throw new Error("Edge LLM endpoint must use http.");
+  if (url.username || url.password || url.search || url.hash)
+    throw new Error("Edge LLM endpoint cannot include credentials or a query.");
+  if (!url.port) throw new Error("Edge LLM endpoint must include a port.");
+  if (!isPrivateHost(url.hostname))
+    throw new Error(
+      "Edge LLM endpoint must be localhost or a private LAN address.",
+    );
+  if (url.pathname.replace(/\/$/, "") !== "/v1/chat/completions")
+    throw new Error(
+      "Edge LLM endpoint path must be /v1/chat/completions.",
+    );
+  return url.toString();
+}
+
+function resolveEndpoint(saved) {
+  const env = process.env.DAEMON_LLM_ENDPOINT;
+  if (env) return validateEndpoint(env);
+  if (typeof saved === "string" && saved.trim()) {
+    try {
+      return validateEndpoint(saved);
+    } catch {
+      // Ignore a stale saved value and use the USB default.
+    }
+  }
+  return validateEndpoint(DEFAULT_ENDPOINT);
+}
+
+function buildChatRequest(prompt) {
+  return {
+    model: MODEL,
+    temperature: 0.2,
+    stream: false,
+    max_tokens: 1536,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: prompt },
+    ],
+  };
+}
+
+function extractAssistantText(payload) {
+  const content = payload?.choices?.[0]?.message?.content;
+  if (typeof content === "string") return content;
+  if (Array.isArray(content))
+    return content
+      .map((part) =>
+        typeof part === "string" ? part : part?.text || part?.content || "",
+      )
+      .join("");
+  return "";
+}
+
+function extractJsonObject(text) {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const source = fenced ? fenced[1] : text;
+  const start = source.indexOf("{");
+  if (start < 0) return null;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < source.length; index++) {
+    const char = source[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') inString = true;
+    else if (char === "{") depth++;
+    else if (char === "}") {
+      depth--;
+      if (depth === 0) return source.slice(start, index + 1);
+    }
+  }
+  return null;
+}
+
+function asString(value, limit) {
+  if (typeof value !== "string") return null;
+  const text = value.replace(/\0/g, "");
+  if (!text.trim() || text.length > limit) return null;
+  return text;
+}
+
+function normalizeAction(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  if (value.action === "chat") {
+    const reply = asString(value.reply, 20_000);
+    return reply ? { action: "chat", reply } : null;
+  }
+  if (value.action === "code") {
+    const filename = asString(value.filename, 180);
+    const content = asString(value.content, 2_000_000);
+    return filename && content
+      ? { action: "code", filename, content }
+      : null;
+  }
+  if (value.action === "essay") {
+    const title = asString(value.title, 180);
+    const content = asString(value.content, 200_000);
+    const reply = typeof value.reply === "string" ? value.reply.slice(0, 500) : "";
+    return title && content
+      ? { action: "essay", title, content, reply }
+      : null;
+  }
+  if (value.action === "ppt") {
+    const title = asString(value.title, 180);
+    if (!title || !Array.isArray(value.slides) || value.slides.length > 40)
+      return null;
+    const slides = [];
+    for (const slide of value.slides) {
+      if (!slide || typeof slide !== "object") continue;
+      const heading = asString(slide.heading, 120) || "Slide";
+      const bullets = Array.isArray(slide.bullets)
+        ? slide.bullets
+            .filter((bullet) => typeof bullet === "string" && bullet.trim())
+            .map((bullet) => bullet.trim().slice(0, 300))
+            .slice(0, 8)
+        : [];
+      slides.push({ heading, bullets });
+    }
+    if (!slides.length) slides.push({ heading: title, bullets: [] });
+    const reply = typeof value.reply === "string" ? value.reply.slice(0, 500) : "";
+    return { action: "ppt", title, slides, reply };
+  }
+  return null;
+}
+
+function parseModelAction(text) {
+  const raw = typeof text === "string" ? text : String(text ?? "");
+  try {
+    const slice = extractJsonObject(raw);
+    if (!slice) throw new Error("No JSON object");
+    const normalized = normalizeAction(JSON.parse(slice));
+    if (!normalized) throw new Error("Schema mismatch");
+    return normalized;
+  } catch {
+    const reply = raw.trim();
+    return {
+      action: "chat",
+      reply: reply || "The model returned an empty response.",
+    };
+  }
+}
+
+function healthUrlFor(endpoint) {
+  const url = new URL(endpoint);
+  return `${url.protocol}//${url.hostname}:${url.port}/health`;
+}
+
+module.exports = {
+  SYSTEM_PROMPT,
+  DEFAULT_ENDPOINT,
+  API_KEY,
+  MODEL,
+  validateEndpoint,
+  resolveEndpoint,
+  buildChatRequest,
+  extractAssistantText,
+  extractJsonObject,
+  parseModelAction,
+  healthUrlFor,
+};

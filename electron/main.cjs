@@ -1,8 +1,11 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require("electron");
 const fs = require("node:fs/promises");
+const os = require("node:os");
 const path = require("node:path");
 const { writeArtifact } = require("./artifact-files.cjs");
 const inference = require("./inference.cjs");
+const { resolveEndpoint } = require("./edge-llm.cjs");
+const { ensureEdgeConnection } = require("./edge-connection.cjs");
 const { CODE_EXTENSIONS } = require("./code-languages.cjs");
 const ARTIFACT_EXTENSIONS = new Set([
   ".md",
@@ -141,7 +144,20 @@ app.whenReady().then(async () => {
   handle("device:status", () => deviceMonitor.getStatus());
   handle("device:refresh", () => deviceMonitor.refresh());
   let generating = false;
-  handle("inference:config", () => ({ provider: mode }));
+  handle("inference:config", () => ({
+    provider: mode,
+    endpoint: resolveEndpoint(settings.llmEndpoint),
+  }));
+  handle("inference:endpoint", (value) => {
+    const endpoint = require("./edge-llm.cjs").validateEndpoint(value);
+    if (settingsError) throw new Error(settingsError);
+    return serialize(async () => {
+      const next = { ...settings, llmEndpoint: endpoint };
+      await atomicWrite(settingsFile(), next);
+      settings = next;
+      return { endpoint };
+    });
+  });
   handle("inference:generate", async (prompt) => {
     inference.validatePrompt(prompt);
     if (mode !== "android")
@@ -150,7 +166,14 @@ app.whenReady().then(async () => {
       throw new Error("An Android inference request is already in progress.");
     generating = true;
     try {
-      return await inference.generate(prompt);
+      const endpoint = resolveEndpoint(settings.llmEndpoint);
+      await ensureEdgeConnection({ endpoint }).catch((error) => {
+        console.error("Edge connection check:", error.message);
+      });
+      return await inference.generate(prompt, {
+        endpoint,
+        openFile: (_kind, filePath) => artifactOpener.open(filePath),
+      });
     } finally {
       generating = false;
     }
@@ -246,16 +269,40 @@ app.whenReady().then(async () => {
           },
         };
       }
-      const saved = await writeArtifact(outputDirectory, a);
+      let saved;
+      if (typeof a.workspacePath === "string") {
+        const root = await fs.realpath(
+          path.join(os.homedir(), "ai-workspace"),
+        );
+        const actual = await fs.realpath(a.workspacePath);
+        const relative = path.relative(root, actual);
+        if (
+          !relative ||
+          relative.startsWith("..") ||
+          path.isAbsolute(relative) ||
+          path.basename(actual) !== a.name ||
+          !(await fs.stat(actual)).isFile()
+        )
+          throw new Error("File path rejected");
+        const { workspacePath: _workspacePath, skipOpen: _skipOpen, ...rest } =
+          a;
+        saved = { ...rest, path: actual };
+      } else saved = await writeArtifact(outputDirectory, a);
       const next = { ...workspace, artifacts: [...workspace.artifacts, saved] };
       await atomicWrite(dataFile(), next);
       workspace = next;
       let opening;
-      try {
-        opening = await artifactOpener.open(await managedPath(saved.id));
-      } catch (error) {
-        opening = { status: "failed", message: error.message };
-      }
+      if (a.skipOpen === true && a.workspacePath) {
+        opening = {
+          status: "requested",
+          message: "Saved in the AI workspace and opened.",
+        };
+      } else
+        try {
+          opening = await artifactOpener.open(await managedPath(saved.id));
+        } catch (error) {
+          opening = { status: "failed", message: error.message };
+        }
       return { ...saved, opening };
     });
   });

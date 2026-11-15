@@ -149,8 +149,15 @@ try {
         !document.querySelector("textarea").disabled,
     );
     const requests = await app.evaluate(() => globalThis.daemonRequests);
-    assert.equal(requests.at(-1).url, "http://127.0.0.1:5000/process");
-    assert.deepEqual(requests.at(-1).body, { prompt });
+    assert.equal(
+      requests.at(-1).url,
+      "http://127.0.0.1:8080/v1/chat/completions",
+    );
+    assert.equal(requests.at(-1).body.temperature, 0.2);
+    assert.deepEqual(requests.at(-1).body.response_format, {
+      type: "json_object",
+    });
+    assert.equal(requests.at(-1).body.messages.at(-1).content, prompt);
     assert.equal(requests.at(-1).redirect, "error");
   }
   await submit(

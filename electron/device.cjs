@@ -4,7 +4,9 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const os = require("node:os");
 const execute = promisify(execFile);
-const HEALTH_URL = "http://127.0.0.1:5000/health";
+const BRAIN_PORT = 8080;
+const HEALTH_URL = `http://127.0.0.1:${BRAIN_PORT}/health`;
+const FORWARD_RULE = `tcp:${BRAIN_PORT}`;
 const status = (state, label, detail) => ({ state, label, detail });
 const unknown = () =>
   status(
@@ -106,7 +108,13 @@ function createDeviceMonitor({
         chunks.push(Buffer.from(value));
       }
       const data = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-      return data?.service === "vidur-brain" && data.status === "ok";
+      // llama-server reports {"status":"ok"}. The older Flask brain is still accepted.
+      return (
+        data?.status === "ok" &&
+        (data.service === undefined ||
+          data.service === "llama-server" ||
+          data.service === "vidur-brain")
+      );
     } catch {
       return false;
     } finally {
@@ -192,16 +200,16 @@ function createDeviceMonitor({
           .filter(Boolean)
           .map((line) => line.trim().split(/\s+/));
       let rules = await list();
-      const conflicts = rules.filter((rule) => rule[1] === "tcp:5000");
+      const conflicts = rules.filter((rule) => rule[1] === FORWARD_RULE);
       if (
         conflicts.some(
-          (rule) => rule[0] !== device.serial || rule[2] !== "tcp:5000",
+          (rule) => rule[0] !== device.serial || rule[2] !== FORWARD_RULE,
         )
       )
         return status(
           "forward-error",
           "Forwarding conflict",
-          "Local port 5000 is forwarded to another device or service. Resolve the existing rule before retrying.",
+          "Local port 8080 is forwarded to another device or service. Resolve the existing rule before retrying.",
         );
       if (!conflicts.length) {
         await command(executable, [
@@ -209,8 +217,8 @@ function createDeviceMonitor({
           device.serial,
           "forward",
           "--no-rebind",
-          "tcp:5000",
-          "tcp:5000",
+          FORWARD_RULE,
+          FORWARD_RULE,
         ]);
         rules = await list();
       }
@@ -218,8 +226,8 @@ function createDeviceMonitor({
         !rules.some(
           (rule) =>
             rule[0] === device.serial &&
-            rule[1] === "tcp:5000" &&
-            rule[2] === "tcp:5000",
+            rule[1] === FORWARD_RULE &&
+            rule[2] === FORWARD_RULE,
         )
       )
         throw new Error("Forwarding not verified");
@@ -227,19 +235,19 @@ function createDeviceMonitor({
       return status(
         "forward-error",
         "Forwarding unavailable",
-        "Could not verify ADB forwarding on port 5000. Check the device and whether another application owns that port.",
+        "Could not verify ADB forwarding on port 8080. Check the device and whether another application owns that port.",
       );
     }
     if (!(await health()))
       return status(
         "brain-unavailable",
         "Brain service unavailable",
-        "USB forwarding is verified, but the brain health check failed. Start or update the Flask brain on the phone (port 5000).",
+        "USB forwarding is verified, but llama-server did not answer on port 8080. Start it on the phone and run adb forward tcp:8080 tcp:8080.",
       );
     return status(
       "connected",
       "Connected",
-      "Brain service reachable · Qwen readiness is checked when you send a prompt",
+      "Edge LLM reachable at 127.0.0.1:8080 · Qwen runs when you send a prompt",
     );
   }
   function refresh() {
@@ -284,4 +292,4 @@ function createDeviceMonitor({
     },
   };
 }
-module.exports = { createDeviceMonitor, HEALTH_URL };
+module.exports = { createDeviceMonitor, HEALTH_URL, BRAIN_PORT };
