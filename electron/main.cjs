@@ -7,6 +7,7 @@ const inference = require("./inference.cjs");
 const { resolveEndpoint } = require("./edge-llm.cjs");
 const { ensureEdgeConnection } = require("./edge-connection.cjs");
 const { CODE_EXTENSIONS } = require("./code-languages.cjs");
+const stt = require("./stt.cjs").createStt();
 const ARTIFACT_EXTENSIONS = new Set([
   ".md",
   ".csv",
@@ -363,8 +364,12 @@ app.whenReady().then(async () => {
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   win.webContents.on("will-navigate", (event) => event.preventDefault());
   win.webContents.session.setPermissionRequestHandler(
-    (_wc, _permission, callback) => callback(false),
+    (_wc, permission, callback) => callback(permission === "media"),
   );
+  win.webContents.session.setPermissionCheckHandler(
+    (_wc, permission) => permission === "media",
+  );
+  handle("stt:transcribe", (data) => stt.transcribe(data));
   deviceMonitor.start();
   if (process.env.DAEMON_DEV === "1")
     await win.loadURL(
