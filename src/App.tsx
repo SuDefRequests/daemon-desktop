@@ -32,6 +32,7 @@ import {
   FolderOpen,
   AlertCircle,
   LoaderCircle,
+  Mic,
 } from "lucide-react";
 import type {
   Artifact,
@@ -126,7 +127,6 @@ export default function App() {
   const [savingName, setSavingName] = useState(false);
   const [selectedModel, setSelectedModel] = useState(models[0].id);
   const [thinkingMode, setThinkingMode] = useState<ThinkingMode>("Low");
-  const [thinkingMenu, setThinkingMenu] = useState(false);
   const isMock = provider.mode === "mock";
   const [connection, setConnection] = useState<ConnectionStatus>({
     state: "unknown",
@@ -197,8 +197,107 @@ export default function App() {
     saveQueue = useRef<Promise<unknown>>(Promise.resolve()),
     animatedMessages = useRef(new Set<string>()),
     messagesEnd = useRef<HTMLDivElement>(null);
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const micStopRef = useRef<(() => void) | null>(null);
+  // Gemini-style auto-grow: one line at rest, up to ~5 lines while typing.
+  useEffect(() => {
+    const el = textRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }, [prompt, ready, busy]);
   function notify(text: string, error = false) {
     setNotice({ text, error, id: uid() });
+  }
+  const MIC_MAX_MS = 30_000;
+  function encodeWav(samples: Int16Array, sampleRate: number): Uint8Array {
+    const buffer = new ArrayBuffer(44 + samples.length * 2);
+    const view = new DataView(buffer);
+    const writeStr = (off: number, s: string) => {
+      for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i));
+    };
+    writeStr(0, "RIFF");
+    view.setUint32(4, 36 + samples.length * 2, true);
+    writeStr(8, "WAVE");
+    writeStr(12, "fmt ");
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeStr(36, "data");
+    view.setUint32(40, samples.length * 2, true);
+    for (let i = 0, off = 44; i < samples.length; i++, off += 2)
+      view.setInt16(off, samples[i], true);
+    return new Uint8Array(buffer);
+  }
+  async function finishRecording(chunks: Blob[], mime: string) {
+    setTranscribing(true);
+    try {
+      const blob = new Blob(chunks, { type: mime || "audio/webm" });
+      const ctx = new AudioContext({ sampleRate: 16000 });
+      const decoded = await ctx.decodeAudioData(await blob.arrayBuffer());
+      void ctx.close();
+      // Downmix every channel to mono Int16 at the context's 16 kHz rate.
+      const mixed = new Float32Array(decoded.length);
+      for (let c = 0; c < decoded.numberOfChannels; c++) {
+        const channel = decoded.getChannelData(c);
+        for (let i = 0; i < decoded.length; i++) mixed[i] += channel[i];
+      }
+      const channels = decoded.numberOfChannels || 1;
+      const pcm = new Int16Array(decoded.length);
+      for (let i = 0; i < decoded.length; i++)
+        pcm[i] = Math.max(-1, Math.min(1, mixed[i] / channels)) * 0x7fff;
+      if (!pcm.length) {
+        notify("No audio captured — try again.", true);
+        return;
+      }
+      const text = await window.daemon!.transcribeAudio(
+        encodeWav(pcm, 16000),
+      );
+      if (text.trim()) setPrompt((p) => (p ? `${p} ${text.trim()}` : text.trim()));
+      else notify("No speech detected — speak a little louder.");
+    } catch (e) {
+      notify(`Voice input failed: ${(e as Error).message}`, true);
+    } finally {
+      setTranscribing(false);
+    }
+  }
+  async function toggleMic() {
+    if (recording) {
+      micStopRef.current?.();
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, sampleRate: 16000 },
+      });
+      const recorder = new MediaRecorder(stream);
+      const chunks: Blob[] = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size) chunks.push(e.data);
+      };
+      recorder.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        micStopRef.current = null;
+        setRecording(false);
+        void finishRecording(chunks, recorder.mimeType);
+      };
+      micStopRef.current = () => {
+        clearTimeout(timer);
+        if (recorder.state !== "inactive") recorder.stop();
+      };
+      recorder.start();
+      setRecording(true);
+      const timer = setTimeout(() => micStopRef.current?.(), MIC_MAX_MS);
+    } catch (e) {
+      micStopRef.current = null;
+      setRecording(false);
+      notify(`Microphone unavailable: ${(e as Error).message}`, true);
+    }
   }
   function commit(next: Workspace) {
     dataRef.current = next;
@@ -320,7 +419,6 @@ export default function App() {
     const close = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setModelMenu(false);
-        setThinkingMenu(false);
         setPreview(null);
         setAction(null);
         setMenu(null);
@@ -512,6 +610,7 @@ export default function App() {
     <div className="composer">
       <textarea
         ref={textRef}
+        rows={1}
         maxLength={12000}
         aria-label="Your prompt"
         placeholder="Ask VIDUR AI to create something…"
@@ -525,34 +624,32 @@ export default function App() {
           }
         }}
       />
-      <div className="composer-toolbar">
-        <div className="model-wrap">
+      <div className="model-wrap">
+        <button
+          className="model-button"
+          aria-expanded={modelMenu}
+          aria-label="Select model"
+          // title="Demo selection only; backend model unchanged"
+          onClick={() => setModelMenu(!modelMenu)}
+        >
+          <Box size={17} />
+          <span>{models.find((m) => m.id === selectedModel)?.name}</span>
+          <small className="model-cap">{thinkingMode}</small>
+          <ChevronDown size={15} />
+        </button>
+        {modelMenu && (
           <button
-            className="model-button"
-            aria-expanded={modelMenu}
-            aria-label="Select model"
-            // title="Demo selection only; backend model unchanged"
-            onClick={() => {
-              setModelMenu(!modelMenu);
-              setThinkingMenu(false);
-            }}
-          >
-            <Box size={17} />
-            <span>{models.find((m) => m.id === selectedModel)?.name}</span>
-            <ChevronDown size={15} />
-          </button>
-          {modelMenu && (
-            <button
-              className="dropdown-backdrop"
-              aria-label="Close model menu"
-              onClick={() => setModelMenu(false)}
-            />
-          )}
-          <AnimatedMenu open={modelMenu} className="model-menu">
-            <p className="eyebrow">MODEL SELECTION </p>
-            {models.map((m) => (
+            className="dropdown-backdrop"
+            aria-label="Close model menu"
+            onClick={() => setModelMenu(false)}
+          />
+        )}
+        <AnimatedMenu open={modelMenu} className="model-menu">
+          <p className="eyebrow">MODEL SELECTION </p>
+          {models.map((m) => (
+            <div className="model-option" key={m.id}>
               <button
-                key={m.id}
+                className="model-option-name"
                 onClick={() => {
                   setSelectedModel(m.id);
                   setModelMenu(false);
@@ -569,75 +666,63 @@ export default function App() {
                   <small>{m.description}</small>
                 </span>
               </button>
-            ))}
-            {/* <div className="menu-note">
-              Demo setting only · does not switch the actual model
-            </div> */}
-          </AnimatedMenu>
-        </div>
-        <div className="model-wrap">
-          <button
-            className="thinking-button"
-            aria-label="Thinking mode"
-            title="Thinking mode is a UI preference only"
-            aria-expanded={thinkingMenu}
-            onClick={() => {
-              setThinkingMenu(!thinkingMenu);
-              setModelMenu(false);
-            }}
-          >
-            <Brain size={16} />
-            <span>{thinkingMode}</span>
-            <ChevronDown size={14} />
-          </button>
-          {thinkingMenu && (
-            <button
-              className="dropdown-backdrop"
-              aria-label="Close thinking menu"
-              onClick={() => setThinkingMenu(false)}
-            />
-          )}
-          <AnimatedMenu
-            open={thinkingMenu}
-            className="model-menu thinking-menu"
-          >
-            <p className="eyebrow">THINKING MODES</p>
-            {thinkingModes.map((mode) => (
-              <button
-                key={mode}
-                onClick={() => {
-                  setThinkingMode(mode);
-                  setThinkingMenu(false);
-                }}
-              >
-                <Check
-                  size={16}
-                  style={{
-                    visibility: thinkingMode === mode ? "visible" : "hidden",
-                  }}
-                />
-                <span>{mode}</span>
-              </button>
-            ))}
-            {/* <div className="menu-note">
-              Not sent to Python · does not change reasoning
-            </div> */}
-          </AnimatedMenu>
-        </div>
-
-        <button
-          className="send"
-          aria-label="Send prompt"
-          onClick={() => void send()}
-          disabled={!prompt.trim() || busy || !ready}
-        >
-          {busy ? (
-            <LoaderCircle className="spin" size={20} />
-          ) : (
-            <ArrowUp size={22} />
-          )}
-        </button>
+              <div className="model-caps">
+                {thinkingModes.map((mode) => (
+                  <button
+                    key={mode}
+                    aria-label={`Capability ${mode}`}
+                    className={
+                      selectedModel === m.id && thinkingMode === mode
+                        ? "cap selected"
+                        : "cap"
+                    }
+                    onClick={() => {
+                      setSelectedModel(m.id);
+                      setThinkingMode(mode);
+                      setModelMenu(false);
+                    }}
+                  >
+                    {mode}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+          {/* <div className="menu-note">
+            Demo setting only · does not switch the actual model
+          </div> */}
+        </AnimatedMenu>
       </div>
+
+      <button
+        className={recording ? "mic recording" : "mic"}
+        aria-label={recording ? "Stop recording" : "Record voice prompt"}
+        title={
+          recording
+            ? "Stop and transcribe (offline)"
+            : "Voice input — speak your prompt (offline)"
+        }
+        onClick={() => void toggleMic()}
+        disabled={(busy || !ready || transcribing) && !recording}
+      >
+        {transcribing ? (
+          <LoaderCircle className="spin" size={17} />
+        ) : (
+          <Mic size={17} />
+        )}
+      </button>
+      <button
+        className={prompt.trim() ? "send" : "send ghost"}
+        aria-label="Send prompt"
+        onClick={() => void send()}
+        disabled={!prompt.trim() || busy || !ready}
+      >
+        {busy ? (
+          <LoaderCircle className="spin" size={20} />
+        ) : (
+          <ArrowUp size={22} />
+        )}
+      </button>
     </div>
   );
   const fileButtons = (a: Artifact) => (
