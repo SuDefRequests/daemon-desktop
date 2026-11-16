@@ -45,7 +45,18 @@
       "dist/**/*",
       "electron/**/*",
       "brain/**/*",
+      "!brain/models/**",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "whisper/",
+        "to": "whisper/"
+      },
+      {
+        "from": "brain/models/ggml-base.en.bin",
+        "to": "whisper/ggml-base.en.bin"
+      }
     ],
     "win": {
       "target": "nsis"
