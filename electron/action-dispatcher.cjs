@@ -199,20 +199,21 @@ async function actionDispatcher(
   }
 
   if (action.action === "essay") {
-    const filename = `${stem(action.title, "document")}.md`;
+    const filename = `${stem(action.title, "document")}.docx`;
     const folder = path.join(workspace, "docs");
     const allocated = await allocate(folder, filename);
     const content = action.content.startsWith("# ")
       ? action.content
       : `# ${action.title}\n\n${action.content}`;
-    await fs.writeFile(allocated.target, content, "utf8");
+    const buffer = await require("./document.cjs").createDocument(content);
+    await fs.writeFile(allocated.target, buffer);
     const opened = await openSaved("essay", allocated.target, openFile);
     const note = action.reply ? `${action.reply.trim()} ` : "";
     return {
       reply: `${note}Saved the document to ${allocated.target}.${opened.note}`.trim(),
       file: {
         kind: "document",
-        extension: ".md",
+        extension: ".docx",
         name: allocated.name,
         content,
         workspacePath: allocated.target,

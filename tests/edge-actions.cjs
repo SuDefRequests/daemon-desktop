@@ -57,6 +57,30 @@ const completion = (content) => ({
     ).action,
     "essay",
   );
+  assert.equal(
+    parseModelAction(
+      '{"action":"essay","title":"Painting","content":"text","reply":"done"}',
+    ).action,
+    "chat",
+  );
+  assert.equal(
+    parseModelAction(
+      '{"action":"essay","title":"Notes","content":"```text\\nlorem ipsum placeholder\\n```","reply":"done"}',
+    ).action,
+    "chat",
+  );
+  assert.equal(
+    parseModelAction(
+      '{"action":"code","filename":"run.py","content":"Text","reply":"done"}',
+    ).action,
+    "chat",
+  );
+  assert.equal(
+    parseModelAction(
+      '{"action":"essay","title":"Cold","content":"The water was cold.","reply":"done"}',
+    ).action,
+    "essay",
+  );
   const messy = parseModelAction("I could not decide, so this is plain text.");
   assert.deepEqual(messy, {
     action: "chat",
@@ -124,8 +148,13 @@ const completion = (content) => ({
     },
     { workspace: root, openFile },
   );
-  assert.equal(essay.file.name, "Morning_rivers.md");
-  assert.match(await fs.readFile(essay.file.workspacePath, "utf8"), /# Morning rivers/);
+  assert.equal(essay.file.name, "Morning_rivers.docx");
+  assert.equal(essay.file.extension, ".docx");
+  const word = await JSZip.loadAsync(await fs.readFile(essay.file.workspacePath));
+  const documentXml = await word.file("word/document.xml").async("string");
+  assert.match(documentXml, /Morning rivers/);
+  assert.match(documentXml, /The water was cold/);
+  assert.match(documentXml, /heading1/i);
   assert.equal(path.dirname(essay.file.workspacePath), path.join(root, "docs"));
   assert.equal(opened.at(-1).kind, "essay");
 
