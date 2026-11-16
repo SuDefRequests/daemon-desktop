@@ -114,6 +114,7 @@ export interface DesktopAPI {
   onDeviceStatus(callback: (status: ConnectionStatus) => void): () => void;
   getInferenceConfig(): Promise<{ provider: ProviderMode }>;
   generate(prompt: string): Promise<BrainResult>;
+  transcribeAudio(data: Uint8Array | ArrayBuffer): Promise<string>;
   load(): Promise<Workspace>;
   save(data: Workspace): Promise<void>;
   saveArtifact(artifact: Artifact): Promise<SavedArtifact>;
