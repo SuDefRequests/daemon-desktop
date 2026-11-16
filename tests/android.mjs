@@ -105,12 +105,10 @@ try {
     await assertStatus(state, label, "Fixture device status");
   await page.locator(".model-button").click();
   await page.getByRole("button", { name: /VIDUR AI Compact/ }).click();
+  await page.locator(".model-button").click();
   await page
-    .getByRole("button", { name: "Thinking mode", exact: true })
-    .click();
-  await page
-    .locator(".thinking-menu")
-    .getByRole("button", { name: "Middle", exact: true })
+    .locator(".model-option", { hasText: "VIDUR AI Compact" })
+    .getByRole("button", { name: "Capability Middle", exact: true })
     .click();
   async function submit(fixture, prompt) {
     await app.evaluate((_electron, fixture) => {
@@ -130,7 +128,10 @@ try {
       await page.locator(".model-button").innerText(),
       /VIDUR AI Compact/,
     );
-    assert.match(await page.locator(".thinking-button").innerText(), /Middle/);
+    assert.match(
+      await page.locator(".model-button").innerText(),
+      /Middle/,
+    );
     await page.getByRole("textbox", { name: "Your prompt" }).fill(prompt);
     await page.getByRole("button", { name: "Send prompt" }).click();
     await page.locator(".loading[role='status']").waitFor();
