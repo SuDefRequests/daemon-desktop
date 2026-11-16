@@ -11,6 +11,51 @@ VIDUR AI is an Electron + React + TypeScript desktop app that connects to a loca
 
 ---
 
+## Offline voice input (mic)
+
+The composer has a mic button next to Send. Click it, speak, click again — your
+words land in the prompt box, fully offline (whisper.cpp runs on the laptop;
+no audio or text ever leaves the machine).
+
+How it works: the renderer records with `MediaRecorder`, decodes to 16 kHz mono
+WAV in the browser, sends the bytes over IPC, and the Electron main process
+spawns `whisper-cli` with the bundled `ggml-base.en.bin` model.
+
+Bundled files (not in git — pull them in once per machine):
+- `whisper/whisper-cli` + libs — the STT engine
+- `brain/models/ggml-base.en.bin` (~141 MB) — the Whisper "base.en" model,
+  packaged into `whisper/` at build time via `extraResources`
+
+### One-time setup (all OSes)
+
+```bash
+# model (~141 MB) into brain/models/
+curl -L -o brain/models/ggml-base.en.bin \
+  "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin"
+```
+
+Then the engine binary (Linux: build from source; Windows: see next section).
+
+### Windows build (easy steps)
+
+The Linux binary (built from source) can't run on Windows, so drop in the
+Windows build once:
+
+1. Download the latest **whisper.cpp Windows release zip** from
+   <https://github.com/ggml-org/whisper.cpp/releases> (file named like
+   `whisper-bin-x64.zip`).
+2. Unzip it and copy **all** of its contents (the `whisper-cli.exe`, and the
+   `ggml`/`whisper` `.dll` files next to it) into this repo's `whisper/`
+   folder — alongside (not replacing) anything already there.
+3. Delete the Linux binary/libs from `whisper/` if you want a lean package
+   (`whisper-cli`, `lib*.so*` — Windows ignores them anyway).
+4. Done. `npm run dist` bundles `whisper/whisper-cli.exe` + the model into
+   the installer automatically. No Python, no node dependencies.
+
+The model file stays the same on every OS.
+
+---
+
 ## Features
 
 ### Local AI workflow
