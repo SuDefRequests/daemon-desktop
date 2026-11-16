@@ -446,58 +446,68 @@ main {
   margin: 0;
 }
 .composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
   background: #1e2125;
   border: 1px solid #3b4046;
-  border-radius: 16px;
-  padding: 19px 19px 14px;
+  border-radius: 26px;
+  padding: 8px 8px 8px 20px;
   box-shadow: 0 6px 20px #00000010;
+  transition: border-color 0.15s ease;
 }
 .composer:focus-within {
   border-color: #807160;
 }
 .composer textarea {
+  flex: 1;
+  min-width: 0;
   background: none;
   border: 0;
   resize: none;
-  width: 100%;
-  height: 55px;
+  height: auto;
+  min-height: 28px;
+  max-height: 160px;
   outline: none !important;
   box-shadow: none;
   font-size: 16px;
   line-height: 1.5;
-  padding: 1px 2px;
+  padding: 4px 2px;
+  align-self: center;
 }
 .composer textarea::placeholder {
   color: #969faa;
 }
-.composer-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
 .model-wrap {
   position: relative;
+  flex-shrink: 0;
 }
-.model-button,
-.thinking-button {
+.model-button {
   display: flex;
   align-items: center;
-  gap: 9px;
-  border: 1px solid #363b41;
-  background: #262a2f;
+  gap: 7px;
+  border: 0;
+  background: none;
   padding: 9px 11px;
-  border-radius: 10px;
+  border-radius: 12px;
   font-size: 12px;
+  cursor: pointer;
+}
+.model-button:hover {
+  background: #262a2f;
 }
 .model-button svg {
   color: #b3bac3;
+}
+.model-button .model-cap {
+  color: #969faa;
+  font-size: 11px;
 }
 .composer-hint {
   font-size: 10px;
   color: #707985;
 }
 .send {
-  margin-left: auto;
   background: #e5d2bb;
   color: #242321;
   display: flex;
@@ -507,10 +517,52 @@ main {
   border-radius: 50%;
   width: 38px;
   height: 38px;
+  transition: opacity 0.18s ease;
+}
+.send.ghost {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 .send:hover:not(:disabled) {
   background: #f4ddc1;
   transform: translateY(-1px);
+}
+.mic {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: none;
+  color: #b3bac3;
+  border-radius: 50%;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.mic:hover:not(:disabled) {
+  background: #262a2f;
+  color: #e5d2bb;
+}
+.mic:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.mic.recording {
+  background: #ef4444;
+  border-color: #ef4444;
+  color: #fff;
+  animation: mic-pulse 1.4s ease-in-out infinite;
+}
+@keyframes mic-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55);
+  }
+  60% {
+    box-shadow: 0 0 0 9px rgba(239, 68, 68, 0);
+  }
 }
 .dropdown-backdrop {
   position: fixed;
@@ -535,17 +587,51 @@ main {
 .model-menu > .eyebrow {
   margin: 0 12px 12px;
 }
-.model-menu > button {
+.model-option {
+  padding: 4px 4px 6px;
+  border-radius: 8px;
+}
+.model-option + .model-option {
+  margin-top: 4px;
+}
+.model-option-name {
   display: flex;
   align-items: center;
   gap: 11px;
   width: 100%;
   text-align: left;
   border: 0;
-  background: #2d3136;
+  background: none;
   border-radius: 8px;
-  padding: 12px;
+  padding: 10px 8px;
   font-size: 13px;
+  cursor: pointer;
+}
+.model-option-name:hover {
+  background: #2d3136;
+}
+.model-caps {
+  display: flex;
+  gap: 6px;
+  padding: 4px 8px 2px 36px;
+}
+.model-caps .cap {
+  border: 1px solid #3b4046;
+  background: none;
+  color: #a0a7b0;
+  font-size: 10px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.model-caps .cap:hover {
+  background: #2d3136;
+  color: #e5d2bb;
+}
+.model-caps .cap.selected {
+  border-color: #807160;
+  background: #2d2a26;
+  color: #e5d2bb;
 }
 .model-menu small {
   display: block;
@@ -1424,26 +1510,13 @@ button:disabled {
   }
 }
 
-.thinking-menu {
-  width: 265px;
-}
-.thinking-menu > button + button {
-  margin-top: 5px;
-}
 @media (max-width: 560px) {
-  .composer-toolbar {
-    gap: 7px;
-  }
-  .model-button,
-  .thinking-button {
+  .model-button {
     padding: 8px;
     font-size: 10px;
     gap: 5px;
   }
-  .thinking-button > svg:first-child {
-    display: none;
-  }
-  .thinking-menu {
+  .model-menu {
     left: auto;
     right: 0;
     width: 240px;
