@@ -5,3 +5,21 @@ test-results/
 .agents/
 release/
 docs/
+
+# Offline STT — dropped in per machine, never committed (GitHub 100 MB limit).
+# Model:   download ggml-base.en.bin into brain/models/ (see README)
+# Engine:  whisper.cpp binary + libs into whisper/ (see README "Windows build")
+brain/models/
+whisper/
+
+# Python venvs (local experiments only)
+.venv*/
+.pnpm-store/
+
+# Lockfile: the shipping build uses npm (package-lock.json is committed).
+# pnpm users get equivalent resolution from package-lock.json.
+pnpm-lock.yaml
+
+# OS cruft
+.DS_Store
+Thumbs.db
