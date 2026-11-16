@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld("daemon", {
   getInferenceConfig: () => ipcRenderer.invoke("inference:config"),
   setLlmEndpoint: (endpoint) => ipcRenderer.invoke("inference:endpoint", endpoint),
   generate: (prompt) => ipcRenderer.invoke("inference:generate", prompt),
+  transcribeAudio: (data) => ipcRenderer.invoke("stt:transcribe", data),
   load: () => ipcRenderer.invoke("workspace:load"),
   save: (data) => ipcRenderer.invoke("workspace:save", data),
   saveArtifact: (artifact) => ipcRenderer.invoke("artifact:save", artifact),
