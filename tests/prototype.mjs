@@ -45,20 +45,18 @@ try {
   assert.equal(await page.locator(".composer .model-button").count(), 1);
   await verifySidebar(page, !mode);
   await page.locator(".model-button").click();
-  assert.equal(await page.locator(".model-menu > button").count(), 2);
+  assert.equal(await page.locator(".model-menu .model-option-name").count(), 2);
   await page.getByRole("button", { name: /VIDUR AI Compact/ }).click();
   assert.match(
     await page.locator(".model-button").innerText(),
     /VIDUR AI Compact/,
   );
+  await page.locator(".model-button").click();
   await page
-    .getByRole("button", { name: "Thinking mode", exact: true })
+    .locator(".model-option", { hasText: "VIDUR AI Compact" })
+    .getByRole("button", { name: "Capability Extended", exact: true })
     .click();
-  await page
-    .locator(".thinking-menu")
-    .getByRole("button", { name: "Extended", exact: true })
-    .click();
-  assert.match(await page.locator(".thinking-button").innerText(), /Extended/);
+  assert.match(await page.locator(".model-button").innerText(), /Extended/);
   const providerCheck = await page.evaluate(async () => {
     const { createProvider, configuredProvider } =
       await import("/src/inference.ts");
@@ -196,7 +194,7 @@ try {
     await page.locator(".model-button").innerText(),
     /VIDUR AI Compact/,
   );
-  assert.match(await page.locator(".thinking-button").innerText(), /Extended/);
+  assert.match(await page.locator(".model-button").innerText(), /Extended/);
 
   await page.getByRole("button", { name: "Preview", exact: true }).click();
   await page.getByRole("dialog").waitFor();
