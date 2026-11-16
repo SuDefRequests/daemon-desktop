@@ -2,7 +2,7 @@ import type { ModelInfo } from "./types";
 export const models: ModelInfo[] = [
   {
     id: "qwen-local",
-    name: "Qwen2.5 0.5B",
+    name: "Qwen2.5 1.5B coder",
     description: "Best for daily work reasoning and coding tasks",
     configured: true,
   },
