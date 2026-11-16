@@ -1,0 +1,9 @@
+shamefullyHoist: true
+onlyBuiltDependencies:
+  - electron
+  - esbuild
+  - electron-winstaller
+allowBuilds:
+  electron: true
+  electron-winstaller: true
+  esbuild: true
