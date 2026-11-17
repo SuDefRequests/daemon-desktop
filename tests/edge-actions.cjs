@@ -79,6 +79,10 @@ const completion = (content) => ({
     parseModelAction('{"action":"chat","reply":"text"}').reply,
     /rephrasing/i,
   );
+  assert.equal(
+    parseModelAction('{"action":"chat","reply":"<note>hello</note>"}').reply,
+    "hello",
+  );
   // Malformed pretty-printed JSON (literal newlines in a string) gets
   // repaired, and its looping content still degrades to the honest note.
   assert.match(

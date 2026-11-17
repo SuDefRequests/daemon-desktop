@@ -504,6 +504,12 @@ export default function App() {
               stylesheet && file.name.endsWith(".html")
                 ? file.content.replace('href="styles.css"', `href="${stylesheet.name}"`)
                 : file.content,
+            // The brain dispatcher already saved this file in the AI
+            // workspace and opened it — don't open a second copy from the
+            // Documents/DAEMON save path.
+            ...(file.workspacePath
+              ? { workspacePath: file.workspacePath, skipOpen: true }
+              : {}),
             ...(file.presentationStatus
               ? { presentationStatus: file.presentationStatus }
               : {}),

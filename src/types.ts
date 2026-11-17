@@ -34,6 +34,7 @@ export interface InferenceResult {
     content: string;
     kind: Exclude<Task, "chat">;
     presentationStatus?: PresentationStatus;
+    workspacePath?: string;
   };
 }
 export interface BrainResult {
@@ -43,6 +44,7 @@ export interface BrainResult {
     presentationStatus?: PresentationStatus;
     content: string;
     kind: Exclude<Task, "chat">;
+    workspacePath?: string;
     extension:
       | ".py"
       | ".js"
@@ -91,6 +93,8 @@ export interface Artifact {
   createdAt: string;
   path?: string;
   source?: ProviderMode;
+  workspacePath?: string;
+  skipOpen?: boolean;
 }
 export interface Workspace {
   conversations: Conversation[];

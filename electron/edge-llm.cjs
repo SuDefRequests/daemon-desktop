@@ -187,10 +187,17 @@ function isDegenerate(text) {
 const DEGENERATE_REPLY =
   "The model returned a repetitive or empty answer. Try rephrasing your prompt.";
 
+// Models sometimes wrap notes in <note>…</note>; the tag itself is noise.
+function cleanReply(value) {
+  return String(value || "")
+    .replace(/<\/?note(?:\s[^>]*)?>/gi, "")
+    .trim();
+}
+
 function normalizeAction(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   if (value.action === "chat") {
-    const reply = asString(value.reply, 20_000);
+    const reply = asString(cleanReply(value.reply), 20_000);
     if (!reply) return null;
     // Degenerate answers ("text", "essay"…, sentence loops) get an honest
     // error, not a meaningless chat bubble that looks like the model spoke.
@@ -209,7 +216,7 @@ function normalizeAction(value) {
   if (value.action === "essay") {
     const title = asString(value.title, 180);
     const content = asString(value.content, 200_000);
-    const reply = typeof value.reply === "string" ? value.reply.slice(0, 500) : "";
+    const reply = cleanReply(value.reply).slice(0, 500);
     if (title && content && !isDegenerate(content))
       return { action: "essay", title, content, reply };
     // A rejected essay degrades to an honest chat note rather than saving
@@ -233,7 +240,7 @@ function normalizeAction(value) {
       slides.push({ heading, bullets });
     }
     if (!slides.length) slides.push({ heading: title, bullets: [] });
-    const reply = typeof value.reply === "string" ? value.reply.slice(0, 500) : "";
+    const reply = cleanReply(value.reply).slice(0, 500);
     return { action: "ppt", title, slides, reply };
   }
   return null;
