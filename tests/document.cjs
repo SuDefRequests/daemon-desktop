@@ -62,6 +62,20 @@ const { writeArtifact } = require("../electron/artifact-files.cjs");
       "Partial but usable model paragraph",
     ),
   );
+  // HTML-wrapped essays: <p> paragraphs become plain Word paragraphs, tags
+  // never reach the document text.
+  const htmlArtifact = {
+    name: "python_essay.docx",
+    kind: "document",
+    content:
+      "<p>Python is a high-level, interpreted programming language.</p><p>The syntax of Python is clean and easy to learn.</p>",
+  };
+  const htmlSaved = await writeArtifact(directory, htmlArtifact);
+  const htmlZip = await validateDocx(await fs.readFile(htmlSaved.path));
+  const htmlXml = await htmlZip.file("word/document.xml").async("string");
+  assert.ok(htmlXml.includes("Python is a high-level"));
+  assert.ok(!htmlXml.includes("<p>"));
+  assert.ok(!htmlXml.includes("&lt;p&gt;"));
   console.log(
     `Word: OOXML/ZIP validity, actual source content, headings, bullets, previews, concurrent collisions, partial text and invalid/failed generation passed. Sample: ${saved.path}`,
   );

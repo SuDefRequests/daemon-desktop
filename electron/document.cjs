@@ -23,6 +23,23 @@ function documentParagraphs(content) {
   }
   if (!/[\p{L}\p{N}]/u.test(text) || /^\{/.test(text))
     throw new Error("No usable document content. No Word file was created.");
+  // Small models sometimes wrap documents in HTML (<p>…</p>). Convert that
+  // to plain paragraphs instead of printing tags in the Word file.
+  text = text
+    .replace(/<p(?:\s[^>]*)?>\s*(?:<br\s*\/?>\s*)*<\/p\s*>/gi, "")
+    .replace(/<\/p\s*>/gi, "\n\n")
+    .replace(/<p(?:\s[^>]*)?>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0?39;|&apos;/gi, "'")
+    .replace(/&amp;/gi, "&")
+    .trim();
+  if (!/[\p{L}\p{N}]/u.test(text))
+    throw new Error("No usable document content. No Word file was created.");
   return text.split(/\r?\n/).map((line) => {
     const heading = line.match(/^\s{0,3}(#{1,6})\s+(.+)$/);
     const bullet = line.match(/^\s*[-*+•]\s+(.+)$/);
