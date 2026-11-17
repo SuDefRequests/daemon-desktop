@@ -70,6 +70,8 @@ function buildChatRequest(prompt) {
   return {
     model: MODEL,
     temperature: 0.2,
+    repeat_penalty: 1.15, // same guard the workbench brain uses; without it
+    // the 1.5B model falls into sentence repetition loops.
     stream: false,
     max_tokens: 1536,
     response_format: { type: "json_object" },
@@ -159,34 +161,60 @@ function isStubContent(text) {
   return !words.length || words.every((word) => STUB_WORDS.has(word));
 }
 
+// ...or fall into a repetition loop ("The moons are also known for their
+// size..." x50). Flag any sentence that repeats itself more than a couple
+// of times — real prose never does that.
+function isRepetitiveLoop(text) {
+  const sentences = String(text || "")
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim().toLowerCase().replace(/[^a-z0-9 ]/g, ""))
+    .filter((s) => s.split(/\s+/).length >= 4);
+  if (sentences.length < 4) return false;
+  const counts = new Map();
+  let max = 0;
+  for (const sentence of sentences) {
+    const n = (counts.get(sentence) || 0) + 1;
+    counts.set(sentence, n);
+    if (n > max) max = n;
+  }
+  return max >= 4;
+}
+
+function isDegenerate(text) {
+  return isStubContent(text) || isRepetitiveLoop(text);
+}
+
+const DEGENERATE_REPLY =
+  "The model returned a repetitive or empty answer. Try rephrasing your prompt.";
+
 function normalizeAction(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   if (value.action === "chat") {
     const reply = asString(value.reply, 20_000);
     if (!reply) return null;
-    // Degenerate answers ("text", "essay"…) get an honest error, not a
-    // meaningless chat bubble that looks like the model spoke.
+    // Degenerate answers ("text", "essay"…, sentence loops) get an honest
+    // error, not a meaningless chat bubble that looks like the model spoke.
     return {
       action: "chat",
-      reply: isStubContent(reply)
-        ? "The model returned an empty answer. Try rephrasing your prompt."
-        : reply,
+      reply: isDegenerate(reply) ? DEGENERATE_REPLY : reply,
     };
   }
   if (value.action === "code") {
     const filename = asString(value.filename, 180);
     const content = asString(value.content, 2_000_000);
-    return filename && content && !isStubContent(content)
-      ? { action: "code", filename, content }
-      : null;
+    if (filename && content && !isDegenerate(content))
+      return { action: "code", filename, content };
+    return { action: "chat", reply: DEGENERATE_REPLY };
   }
   if (value.action === "essay") {
     const title = asString(value.title, 180);
     const content = asString(value.content, 200_000);
     const reply = typeof value.reply === "string" ? value.reply.slice(0, 500) : "";
-    return title && content && !isStubContent(content)
-      ? { action: "essay", title, content, reply }
-      : null;
+    if (title && content && !isDegenerate(content))
+      return { action: "essay", title, content, reply };
+    // A rejected essay degrades to an honest chat note rather than saving
+    // a looping or stub document.
+    return { action: "chat", reply: DEGENERATE_REPLY };
   }
   if (value.action === "ppt") {
     const title = asString(value.title, 180);

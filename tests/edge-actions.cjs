@@ -79,6 +79,26 @@ const completion = (content) => ({
     parseModelAction('{"action":"chat","reply":"text"}').reply,
     /rephrasing/i,
   );
+  assert.match(
+    parseModelAction(
+      '{"action":"essay","title":"Solar","content":"The moons are also known for their orbit, which is the same. '
+      + 'The moons are also known for their orbit, which is the same. '
+      + 'The moons are also known for their orbit, which is the same. '
+      + 'The moons are also known for their orbit, which is the same. '
+      + 'The moons are also known for their orbit, which is the same.","reply":"done"}',
+    ).reply,
+    /repetitive|rephrasing/i,
+  );
+  assert.equal(
+    parseModelAction(
+      '{"action":"essay","title":"Solar","content":"The sun anchors the solar system with immense gravity. '
+      + 'Planets orbit in nearly circular paths kept stable by gravity. '
+      + 'The sun anchors the solar system with immense gravity. '
+      + 'Comets streak past with long glowing tails behind them. '
+      + 'Planets orbit in nearly circular paths kept stable by gravity.","reply":"done"}',
+    ).action,
+    "essay",
+  );
   assert.equal(
     parseModelAction(
       '{"action":"essay","title":"Cold","content":"The water was cold.","reply":"done"}',
