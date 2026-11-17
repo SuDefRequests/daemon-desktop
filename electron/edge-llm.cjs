@@ -307,6 +307,28 @@ function healthUrlFor(endpoint) {
   return `${url.protocol}//${url.hostname}:${url.port}/health`;
 }
 
+const DOCX_INTENT_RE =
+  /\b(essay|document|word doc|docx|report|article)\b/i;
+const DOCX_RETRY_HINT =
+  '(IMPORTANT: reply with "action": "essay". Reply with exactly '
+  + '{"action":"essay","title":"<title>","sections":[{"heading":"<heading>","body":"<full text>"}],'
+  + '"reply":"<short note>"} — NOT chat. No markdown fences.)';
+
+function documentIntent(prompt) {
+  return DOCX_INTENT_RE.test(String(prompt || ""));
+}
+
+function essayTitleFromPrompt(prompt) {
+  const text = String(prompt || "").trim();
+  const match = /\b(?:about|on)\s+(.+?)[.?!]?\s*$/i.exec(text);
+  const raw = match ? match[1] : text.slice(0, 60);
+  const cleaned = raw
+    .replace(/\b(?:write|make|create|a|an|the|detailed|short|essay|document|report|article)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned || "document";
+}
+
 module.exports = {
   SYSTEM_PROMPT,
   DEFAULT_ENDPOINT,
@@ -319,4 +341,7 @@ module.exports = {
   extractJsonObject,
   parseModelAction,
   healthUrlFor,
+  documentIntent,
+  essayTitleFromPrompt,
+  DOCX_RETRY_HINT,
 };

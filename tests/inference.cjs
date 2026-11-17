@@ -1,4 +1,7 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs/promises");
+const os = require("node:os");
+const path = require("node:path");
 const {
   generate,
   convertResponse,
@@ -45,6 +48,40 @@ const json = (data) =>
     }),
     { reply: "Hi!" },
   );
+  // Document ask dodged into prose: retry fires with the schema hint, and
+  // if the model still answers in chat the prose becomes a .docx essay.
+  {
+    const calls = [];
+    const workspace = await fs.mkdtemp(
+      path.join(os.tmpdir(), "vidur-bail-"),
+    );
+    const result = await generate("write an essay on virat kohli", {
+      workspaceRoot: workspace,
+      openFile: async () => {},
+      fetchImpl: async (url, init) => {
+        const body = JSON.parse(init.body);
+        calls.push(body.messages.at(-1).content);
+        return json({
+          choices: [
+            {
+              message: {
+                role: "assistant",
+                content:
+                  '{"action":"chat","reply":"Virat Kohli is an Indian cricketer born in 1987. '
+                  + "He is widely regarded as one of the finest batsmen of his generation. "
+                  + 'He has scored many centuries across all formats of the game and led India to memorable victories."}',
+              },
+            },
+          ],
+        });
+      },
+    });
+    assert.equal(calls.length, 2, "retry should fire for document intents");
+    assert.match(calls[1], /IMPORTANT/);
+    assert.equal(result.file?.extension, ".docx");
+    assert.match(result.reply, /converted from chat reply/);
+    await fs.rm(workspace, { recursive: true, force: true });
+  }
   const languages = [
     ["python", ".py", "python", "print(1)"],
     ["javascript", ".js", "js", "const text = `literal ``` text`;\n"],

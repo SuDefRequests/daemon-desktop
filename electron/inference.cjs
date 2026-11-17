@@ -9,6 +9,9 @@ const {
   buildChatRequest,
   extractAssistantText,
   parseModelAction,
+  documentIntent,
+  essayTitleFromPrompt,
+  DOCX_RETRY_HINT,
 } = require("./edge-llm.cjs");
 const { actionDispatcher } = require("./action-dispatcher.cjs");
 const ENDPOINT = DEFAULT_ENDPOINT;
@@ -324,7 +327,52 @@ async function generate(prompt, options = {}) {
       throw new Error("Android brain returned malformed JSON.");
     }
     if (parsed && Array.isArray(parsed.choices)) {
-      const action = parseModelAction(extractAssistantText(parsed));
+      let action = parseModelAction(extractAssistantText(parsed));
+      // Document asks sometimes get dodged into a long chat reply by the
+      // tiny model. Retry once with the explicit schema; if it still
+      // answers in prose, convert the prose into the requested document.
+      const prose =
+        action.action === "chat" &&
+        action.reply.trim().split(/\s+/).length >= 30;
+      if (documentIntent(valid) && prose) {
+        let better = null;
+        try {
+          const retry = await fetchImpl(endpoint, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+              Authorization: `Bearer ${API_KEY}`,
+            },
+            body: JSON.stringify(
+              buildChatRequest(`${valid}\n${DOCX_RETRY_HINT}`),
+            ),
+            signal: controller.signal,
+            redirect: "error",
+          });
+          if (retry.ok) {
+            const retryParsed = JSON.parse(
+              Buffer.from(await retry.arrayBuffer()).toString("utf8"),
+            );
+            if (retryParsed && Array.isArray(retryParsed.choices)) {
+              const candidate = parseModelAction(
+                extractAssistantText(retryParsed),
+              );
+              if (candidate.action !== "chat") better = candidate;
+            }
+          }
+        } catch {
+          better = null;
+        }
+        if (better) action = better;
+        else
+          action = {
+            action: "essay",
+            title: essayTitleFromPrompt(valid),
+            content: action.reply,
+            reply: "converted from chat reply",
+          };
+      }
       return actionDispatcher(action, {
         workspace: options.workspaceRoot,
         openFile: options.openFile,
