@@ -75,6 +75,10 @@ const completion = (content) => ({
     ).action,
     "chat",
   );
+  assert.match(
+    parseModelAction('{"action":"chat","reply":"text"}').reply,
+    /rephrasing/i,
+  );
   assert.equal(
     parseModelAction(
       '{"action":"essay","title":"Cold","content":"The water was cold.","reply":"done"}',

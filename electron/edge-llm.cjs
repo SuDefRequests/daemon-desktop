@@ -2,10 +2,11 @@
 // the whole instruction is well under 350 tokens so prefill stays fast.
 const SYSTEM_PROMPT = [
   "You control a desktop assistant. Return one JSON object and nothing else.",
-  '{"action":"chat","reply":"text"}',
-  '{"action":"code","filename":"name.ext","content":"full source"}',
-  '{"action":"ppt","title":"deck","slides":[{"heading":"title","bullets":["point"]}],"reply":"short note"}',
-  '{"action":"essay","title":"doc","content":"full text","reply":"short note"}',
+  '{"action":"chat","reply":"<your full answer>"}',
+  '{"action":"code","filename":"name.ext","content":"<full source code>"}',
+  '{"action":"ppt","title":"<title>","slides":[{"heading":"<heading>","bullets":["<point>"]}],"reply":"<note>"}',
+  '{"action":"essay","title":"<title>","content":"<complete essay text>","reply":"<note>"}',
+  "Replace every <placeholder> with real content. Never output a placeholder or the word text as the answer.",
   "Use code for programs, ppt for slide decks, essay for essays or documents, otherwise chat.",
   "Escape quotes and newlines inside strings. No markdown fences.",
 ].join("\n");
@@ -162,7 +163,15 @@ function normalizeAction(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   if (value.action === "chat") {
     const reply = asString(value.reply, 20_000);
-    return reply ? { action: "chat", reply } : null;
+    if (!reply) return null;
+    // Degenerate answers ("text", "essay"…) get an honest error, not a
+    // meaningless chat bubble that looks like the model spoke.
+    return {
+      action: "chat",
+      reply: isStubContent(reply)
+        ? "The model returned an empty answer. Try rephrasing your prompt."
+        : reply,
+    };
   }
   if (value.action === "code") {
     const filename = asString(value.filename, 180);

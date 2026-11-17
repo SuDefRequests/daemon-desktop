@@ -17,7 +17,7 @@ whisper/
 .pnpm-store/
 
 # Lockfile: the shipping build uses npm (package-lock.json is committed).
-# pnpm users get equivalent resolution from package-lock.json.
+# pnpm users get equivalent resolution from package-lock.json.pn
 pnpm-lock.yaml
 
 # OS cruft
