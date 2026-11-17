@@ -79,6 +79,16 @@ const completion = (content) => ({
     parseModelAction('{"action":"chat","reply":"text"}').reply,
     /rephrasing/i,
   );
+  // Malformed pretty-printed JSON (literal newlines in a string) gets
+  // repaired, and its looping content still degrades to the honest note.
+  assert.match(
+    parseModelAction(
+      '{\n  "action": "essay",\n  "title": "Solar",\n  "content": "The moons are also known for their orbit. \n'
+      + "The moons are also known for their orbit. \nThe moons are also known for their orbit. \n"
+      + 'The moons are also known for their orbit. \nThe moons are also known for their orbit.",\n  "reply": "done"\n}',
+    ).reply,
+    /repetitive|rephrasing/i,
+  );
   assert.match(
     parseModelAction(
       '{"action":"essay","title":"Solar","content":"The moons are also known for their orbit, which is the same. '

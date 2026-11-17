@@ -239,12 +239,51 @@ function normalizeAction(value) {
   return null;
 }
 
+// Edge models emit pretty-printed JSON with literal newlines inside string
+// values — invalid JSON. Re-escape control characters inside strings so
+// JSON.parse succeeds, mirroring the workbench brain's repair layer.
+function repairJson(slice) {
+  let out = "";
+  let inString = false;
+  let escaped = false;
+  for (const ch of slice) {
+    const code = ch.charCodeAt(0);
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+        out += ch;
+      } else if (ch === "\\") {
+        escaped = true;
+        out += ch;
+      } else if (ch === '"') {
+        inString = false;
+        out += ch;
+      } else if (code < 0x20) {
+        if (ch === "\n") out += "\\n";
+        else if (ch === "\r") out += "\\r";
+        else if (ch === "\t") out += "\\t";
+        // other control chars are dropped, matching the workbench repair
+      } else out += ch;
+    } else {
+      if (ch === '"') inString = true;
+      out += ch;
+    }
+  }
+  return out;
+}
+
 function parseModelAction(text) {
   const raw = typeof text === "string" ? text : String(text ?? "");
   try {
     const slice = extractJsonObject(raw);
     if (!slice) throw new Error("No JSON object");
-    const normalized = normalizeAction(JSON.parse(slice));
+    let parsed;
+    try {
+      parsed = JSON.parse(slice);
+    } catch {
+      parsed = JSON.parse(repairJson(slice));
+    }
+    const normalized = normalizeAction(parsed);
     if (!normalized) throw new Error("Schema mismatch");
     return normalized;
   } catch {
